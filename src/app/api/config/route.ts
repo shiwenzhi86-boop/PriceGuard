@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSystemConfig, updateSystemConfig } from '@/lib/db';
 import { testEmailConfig } from '@/lib/email';
+import { testWechatWebhook } from '@/lib/wechat';
 
 // GET /api/config - 获取系统配置
 export async function GET() {
@@ -25,7 +26,7 @@ export async function GET() {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
-    const { defaultCheckInterval, maxProducts, emailConfig } = body as {
+    const { defaultCheckInterval, maxProducts, emailConfig, wechatConfig } = body as {
       defaultCheckInterval?: number;
       maxProducts?: number;
       emailConfig?: {
@@ -35,6 +36,10 @@ export async function PUT(request: NextRequest) {
         smtpPass?: string;
         fromEmail?: string;
         toEmail?: string;
+        enabled?: boolean;
+      };
+      wechatConfig?: {
+        webhookUrl?: string;
         enabled?: boolean;
       };
     };
@@ -54,6 +59,13 @@ export async function PUT(request: NextRequest) {
         enabled: emailConfig.enabled ?? currentConfig.emailConfig.enabled,
       };
     }
+    if (wechatConfig) {
+      const currentConfig = getSystemConfig();
+      updateData.wechatConfig = {
+        webhookUrl: wechatConfig.webhookUrl ?? currentConfig.wechatConfig.webhookUrl,
+        enabled: wechatConfig.enabled ?? currentConfig.wechatConfig.enabled,
+      };
+    }
 
     const config = updateSystemConfig(updateData);
     return NextResponse.json({ success: true, data: config });
@@ -67,8 +79,9 @@ export async function PUT(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { emailConfig } = body as {
-      emailConfig: {
+    const { type, emailConfig, webhookUrl } = body as {
+      type?: 'email' | 'wechat';
+      emailConfig?: {
         smtpHost: string;
         smtpPort: number;
         smtpUser: string;
@@ -77,8 +90,18 @@ export async function POST(request: NextRequest) {
         toEmail: string;
         enabled: boolean;
       };
+      webhookUrl?: string;
     };
 
+    if (type === 'wechat') {
+      if (!webhookUrl) {
+        return NextResponse.json({ success: false, error: '请填写 Webhook URL' }, { status: 400 });
+      }
+      const result = await testWechatWebhook(webhookUrl);
+      return NextResponse.json(result);
+    }
+
+    // 默认测试邮件
     if (!emailConfig?.smtpHost || !emailConfig?.smtpUser || !emailConfig?.smtpPass) {
       return NextResponse.json({ success: false, error: '请填写完整的 SMTP 配置' }, { status: 400 });
     }
@@ -86,7 +109,7 @@ export async function POST(request: NextRequest) {
     const result = await testEmailConfig(emailConfig);
     return NextResponse.json(result);
   } catch (error) {
-    console.error('[API] 测试邮件失败:', error);
-    return NextResponse.json({ success: false, error: '测试邮件发送失败' }, { status: 500 });
+    console.error('[API] 测试通知失败:', error);
+    return NextResponse.json({ success: false, error: '测试发送失败' }, { status: 500 });
   }
 }

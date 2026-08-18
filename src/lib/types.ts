@@ -58,12 +58,26 @@ export interface EmailConfig {
   enabled: boolean;
 }
 
+// 企业微信配置
+export interface WechatConfig {
+  webhookUrl: string;
+  enabled: boolean;
+}
+
+// 平台 Cookie
+export interface PlatformCookie {
+  platform: Platform;
+  cookie: string;
+  updatedAt: string;
+}
+
 // 系统配置
 export interface SystemConfig {
   id: string;
   defaultCheckInterval: number; // 默认检查间隔（分钟）
   maxProducts: number;
   emailConfig: EmailConfig;
+  wechatConfig: WechatConfig;
   updatedAt: string;
 }
 

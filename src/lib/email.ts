@@ -1,6 +1,9 @@
 import nodemailer from 'nodemailer';
 import type { Product, EmailConfig } from './types';
 
+/**
+ * 发送邮件价格提醒
+ */
 export async function sendPriceAlert(
   emailConfig: EmailConfig,
   product: Product,

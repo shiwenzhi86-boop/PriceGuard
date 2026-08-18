@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getAllProducts, updateProduct, addPriceRecord, addNotificationRecord, getSystemConfig } from '@/lib/db';
 import { fetchProductPrice } from '@/lib/scraper';
 import { sendPriceAlert } from '@/lib/email';
+import { sendWechatAlert } from '@/lib/wechat';
 
 // POST /api/monitor/run - 手动触发一次价格检查
 export async function POST() {
@@ -51,13 +52,16 @@ export async function POST() {
           // 发送邮件通知
           const emailSent = await sendPriceAlert(config.emailConfig, product, priceResult.finalPrice);
 
+          // 发送企业微信通知
+          const wechatSent = await sendWechatAlert(config.wechatConfig, product, priceResult.finalPrice);
+
           addNotificationRecord({
             productId: product.id,
             type: 'price_reached',
             message: `商品价格已达目标价！当前 ¥${priceResult.finalPrice}，目标 ¥${product.targetPrice}`,
             currentPrice: priceResult.finalPrice,
             targetPrice: product.targetPrice,
-            success: emailSent,
+            success: emailSent || wechatSent,
           });
 
           notified = true;

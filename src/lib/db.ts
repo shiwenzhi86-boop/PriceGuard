@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
-import type { Product, PriceRecord, NotificationRecord, SystemConfig, EmailConfig, MonitorStatus } from './types';
+import type { Product, PriceRecord, NotificationRecord, SystemConfig, EmailConfig, WechatConfig, MonitorStatus, Platform, PlatformCookie } from './types';
 
 const DB_PATH = path.join(process.env.COZE_WORKSPACE_PATH || '/workspace/projects', 'data', 'price_monitor.db');
 
@@ -77,6 +77,14 @@ function initTables(database: Database.Database) {
       from_email TEXT NOT NULL DEFAULT '',
       to_email TEXT NOT NULL DEFAULT '',
       email_enabled INTEGER NOT NULL DEFAULT 0,
+      wechat_webhook_url TEXT NOT NULL DEFAULT '',
+      wechat_enabled INTEGER NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS platform_cookies (
+      platform TEXT PRIMARY KEY CHECK(platform IN ('taobao', 'jd', 'vipshop')),
+      cookie TEXT NOT NULL DEFAULT '',
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
@@ -84,6 +92,16 @@ function initTables(database: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_price_records_checked_at ON price_records(checked_at);
     CREATE INDEX IF NOT EXISTS idx_notification_records_product_id ON notification_records(product_id);
   `);
+
+  // 迁移：为已存在的 system_config 表添加 wechat 字段
+  try {
+    database.exec(`
+      ALTER TABLE system_config ADD COLUMN wechat_webhook_url TEXT NOT NULL DEFAULT '';
+      ALTER TABLE system_config ADD COLUMN wechat_enabled INTEGER NOT NULL DEFAULT 0;
+    `);
+  } catch {
+    // 字段已存在，忽略
+  }
 
   // 初始化默认配置
   const config = database.prepare('SELECT id FROM system_config WHERE id = ?').get('default');
@@ -259,6 +277,7 @@ export function updateSystemConfig(data: Partial<{
   defaultCheckInterval: number;
   maxProducts: number;
   emailConfig: EmailConfig;
+  wechatConfig: WechatConfig;
 }>): SystemConfig {
   const fields: string[] = [];
   const values: unknown[] = [];
@@ -283,6 +302,13 @@ export function updateSystemConfig(data: Partial<{
       data.emailConfig.enabled ? 1 : 0
     );
   }
+  if (data.wechatConfig) {
+    fields.push('wechat_webhook_url = ?', 'wechat_enabled = ?');
+    values.push(
+      data.wechatConfig.webhookUrl,
+      data.wechatConfig.enabled ? 1 : 0
+    );
+  }
 
   if (fields.length > 0) {
     fields.push("updated_at = ?");
@@ -291,6 +317,42 @@ export function updateSystemConfig(data: Partial<{
   }
 
   return getSystemConfig();
+}
+
+// ============ Platform Cookies ============
+
+export function getPlatformCookie(platform: Platform): PlatformCookie | null {
+  const row = getDb().prepare('SELECT * FROM platform_cookies WHERE platform = ?').get(platform) as Record<string, unknown> | undefined;
+  if (!row) return null;
+  return {
+    platform: row.platform as Platform,
+    cookie: row.cookie as string,
+    updatedAt: row.updated_at as string,
+  };
+}
+
+export function getAllPlatformCookies(): PlatformCookie[] {
+  const rows = getDb().prepare('SELECT * FROM platform_cookies').all() as Record<string, unknown>[];
+  return rows.map(row => ({
+    platform: row.platform as Platform,
+    cookie: row.cookie as string,
+    updatedAt: row.updated_at as string,
+  }));
+}
+
+export function savePlatformCookie(platform: Platform, cookie: string): PlatformCookie {
+  const now = new Date().toISOString();
+  getDb().prepare(`
+    INSERT INTO platform_cookies (platform, cookie, updated_at)
+    VALUES (?, ?, ?)
+    ON CONFLICT(platform) DO UPDATE SET cookie = ?, updated_at = ?
+  `).run(platform, cookie, now, cookie, now);
+  return { platform, cookie, updatedAt: now };
+}
+
+export function deletePlatformCookie(platform: Platform): boolean {
+  const result = getDb().prepare('DELETE FROM platform_cookies WHERE platform = ?').run(platform);
+  return result.changes > 0;
 }
 
 // ============ Mapper Functions ============
@@ -354,6 +416,10 @@ function mapSystemConfig(row: Record<string, unknown>): SystemConfig {
       fromEmail: row.from_email as string,
       toEmail: row.to_email as string,
       enabled: (row.email_enabled as number) === 1,
+    },
+    wechatConfig: {
+      webhookUrl: (row.wechat_webhook_url as string) || '',
+      enabled: (row.wechat_enabled as number) === 1,
     },
     updatedAt: row.updated_at as string,
   };

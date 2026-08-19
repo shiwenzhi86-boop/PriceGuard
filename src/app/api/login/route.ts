@@ -1,13 +1,17 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { launchLoginBrowser } from '@/lib/scraper';
+import type { Platform } from '@/lib/types';
 
 /**
  * POST /api/login - 启动有头模式浏览器进行登录
- * 会弹出可见的 Chrome 窗口，用户在里面登录京东
+ * 会弹出可见的 Chrome 窗口，用户在里面登录对应平台
  */
-export async function POST() {
+export async function POST(request: NextRequest) {
   try {
-    const result = await launchLoginBrowser();
+    const body = await request.json();
+    const platform: Platform = body.platform || 'jd';
+
+    const result = await launchLoginBrowser(platform);
 
     if (result.success) {
       return NextResponse.json({

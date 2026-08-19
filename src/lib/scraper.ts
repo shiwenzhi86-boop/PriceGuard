@@ -75,7 +75,7 @@ async function getBrowser(): Promise<Browser> {
  * 启动有头模式浏览器（用于首次登录）
  * 会弹出可见的 Chrome 窗口
  */
-export async function launchLoginBrowser(): Promise<{ success: boolean; message: string }> {
+export async function launchLoginBrowser(platform: Platform = 'jd'): Promise<{ success: boolean; message: string }> {
   try {
     // 确保配置文件目录存在
     if (!fs.existsSync(BROWSER_PROFILE_DIR)) {
@@ -98,13 +98,28 @@ export async function launchLoginBrowser(): Promise<{ success: boolean; message:
 
     const page = await browser.newPage();
 
-    // 打开京东登录页
-    await page.goto('https://passport.jd.com/new/login.aspx', {
+    // 根据平台打开对应的登录页
+    const loginUrls: Record<Platform, string> = {
+      jd: 'https://passport.jd.com/new/login.aspx',
+      taobao: 'https://login.taobao.com/member/login.jhtml',
+      vipshop: 'https://passport.vip.com/login?src=https://www.vip.com',
+    };
+
+    const platformNames: Record<Platform, string> = {
+      jd: '京东',
+      taobao: '淘宝/天猫',
+      vipshop: '唯品会',
+    };
+
+    const loginUrl = loginUrls[platform];
+    const platformName = platformNames[platform];
+
+    await page.goto(loginUrl, {
       waitUntil: 'networkidle0',
       timeout: 30000,
     });
 
-    console.log('[Scraper] 登录浏览器已打开，请在浏览器中登录京东');
+    console.log(`[Scraper] 登录浏览器已打开，请在浏览器中登录${platformName}`);
     console.log('[Scraper] 登录完成后关闭浏览器窗口即可');
 
     // 监听浏览器关闭事件
@@ -115,7 +130,7 @@ export async function launchLoginBrowser(): Promise<{ success: boolean; message:
 
     return {
       success: true,
-      message: '登录窗口已打开，请在浏览器中登录京东。登录完成后关闭浏览器窗口即可。',
+      message: `登录窗口已打开，请在浏览器中登录${platformName}。登录完成后关闭浏览器窗口即可。`,
     };
   } catch (error) {
     return {

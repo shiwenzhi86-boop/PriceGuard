@@ -110,7 +110,7 @@ export function SettingsPanel() {
     }
   };
 
-  const handleLogin = async (platform: 'jd' | 'taobao' | 'vip') => {
+  const handleLogin = async (platform: 'jd' | 'taobao' | 'vipshop') => {
     setLoggingIn(true);
     setLoginResult(null);
     try {
@@ -277,7 +277,7 @@ export function SettingsPanel() {
               {loggingIn ? '打开中...' : '登录淘宝'}
             </button>
             <button
-              onClick={() => handleLogin('vip')}
+              onClick={() => handleLogin('vipshop')}
               disabled={loggingIn}
               className="px-4 py-2 bg-pink-600 hover:bg-pink-700 disabled:bg-gray-600 text-white text-sm font-medium rounded-lg transition-colors"
             >

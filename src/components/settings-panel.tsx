@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { Save, TestTube, CheckCircle, XCircle, Loader2, LogIn, Cookie, RefreshCw } from 'lucide-react';
+import { Save, TestTube, CheckCircle, XCircle, Loader2, LogIn, Cookie } from 'lucide-react';
 
 interface EmailConfig {
   smtpHost: string;
@@ -40,9 +40,6 @@ export function SettingsPanel() {
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [loggingIn, setLoggingIn] = useState(false);
   const [loginResult, setLoginResult] = useState<{ success: boolean; message?: string } | null>(null);
-  const [repoUrl, setRepoUrl] = useState('');
-  const [checkingUpdate, setCheckingUpdate] = useState(false);
-  const [updateResult, setUpdateResult] = useState<{ success: boolean; message?: string } | null>(null);
 
   useEffect(() => {
     fetchConfig();
@@ -126,28 +123,6 @@ export function SettingsPanel() {
       setLoginResult({ success: false, message: '网络错误，请检查程序是否正常运行' });
     } finally {
       setLoggingIn(false);
-    }
-  };
-
-  const handleCheckUpdate = async () => {
-    if (!repoUrl.trim()) {
-      setUpdateResult({ success: false, message: '请先输入 GitHub 仓库地址' });
-      return;
-    }
-    setCheckingUpdate(true);
-    setUpdateResult(null);
-    try {
-      const res = await fetch('/api/update', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ repoUrl: repoUrl.trim() }),
-      });
-      const data = await res.json();
-      setUpdateResult({ success: data.success, message: data.message || data.error });
-    } catch (error) {
-      setUpdateResult({ success: false, message: '网络错误，请检查程序是否正常运行' });
-    } finally {
-      setCheckingUpdate(false);
     }
   };
 
@@ -488,55 +463,6 @@ export function SettingsPanel() {
             <CheckCircle className="w-4 h-4" /> 已保存
           </span>
         )}
-      </div>
-
-      {/* Program Update */}
-      <div className="bg-[#1A1D27] border border-[#2D3348] rounded-xl p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-white">程序更新</h3>
-          <span className="text-xs text-[#94A3B8]">当前版本: v1.0.0</span>
-        </div>
-
-        <div className="space-y-4">
-          <p className="text-sm text-[#94A3B8]">
-            点击「检查更新」自动从 GitHub 拉取最新代码并重启服务。
-            更新前请确保已安装 Git 并配置了仓库地址。
-          </p>
-
-          <div className="space-y-2">
-            <Label className="text-sm text-[#94A3B8]">GitHub 仓库地址</Label>
-            <Input
-              placeholder="https://github.com/你的用户名/PriceGuard.git"
-              value={repoUrl}
-              onChange={e => setRepoUrl(e.target.value)}
-              className="bg-[#0F1117] border-[#2D3348] text-white placeholder:text-[#94A3B8]"
-            />
-          </div>
-
-          <div className="flex items-center gap-3">
-            <Button
-              onClick={handleCheckUpdate}
-              disabled={checkingUpdate}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white"
-            >
-              {checkingUpdate ? (
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              ) : (
-                <RefreshCw className="w-4 h-4 mr-2" />
-              )}
-              检查更新
-            </Button>
-            {updateResult && (
-              <div className={`flex items-center gap-1 text-sm ${updateResult.success ? 'text-emerald-400' : 'text-red-400'}`}>
-                {updateResult.success ? (
-                  <><CheckCircle className="w-4 h-4" /> {updateResult.message}</>
-                ) : (
-                  <><XCircle className="w-4 h-4" /> {updateResult.message}</>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
       </div>
     </div>
   );

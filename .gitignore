@@ -90,6 +90,9 @@ logs/
 # Preview files
 .preview
 
+# App data (database, browser profiles)
+data/
+
 # CodeGraph index
 .codegraph
 # Dependencies

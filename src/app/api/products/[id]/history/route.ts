@@ -8,7 +8,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const history = getPriceHistory(id, 90);
+    const history = await getPriceHistory(id, 90);
     return NextResponse.json({ success: true, data: history });
   } catch (error) {
     console.error('[API] 获取价格历史失败:', error);

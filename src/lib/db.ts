@@ -1,29 +1,27 @@
-import Database from 'better-sqlite3';
+import { createClient, type Client } from '@libsql/client';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import type { Product, PriceRecord, NotificationRecord, SystemConfig, EmailConfig, WechatConfig, MonitorStatus, Platform, PlatformCookie } from './types';
 
 const DB_PATH = path.join(process.env.COZE_WORKSPACE_PATH || '/workspace/projects', 'data', 'price_monitor.db');
 
-let db: Database.Database | null = null;
+let db: Client | null = null;
 
-function getDb(): Database.Database {
+async function getDb(): Promise<Client> {
   if (!db) {
-    // 确保目录存在
-    const fs = require('fs');
+    const fs = await import('fs');
     const dir = path.dirname(DB_PATH);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
-    db = new Database(DB_PATH);
-    db.pragma('journal_mode = WAL');
-    initTables(db);
+    db = createClient({ url: `file:${DB_PATH}` });
+    await initTables(db);
   }
   return db;
 }
 
-function initTables(database: Database.Database) {
-  database.exec(`
+async function initTables(database: Client) {
+  await database.execute(`
     CREATE TABLE IF NOT EXISTS products (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -40,7 +38,9 @@ function initTables(database: Database.Database) {
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+  `);
 
+  await database.execute(`
     CREATE TABLE IF NOT EXISTS price_records (
       id TEXT PRIMARY KEY,
       product_id TEXT NOT NULL,
@@ -53,7 +53,9 @@ function initTables(database: Database.Database) {
       checked_at TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
     );
+  `);
 
+  await database.execute(`
     CREATE TABLE IF NOT EXISTS notification_records (
       id TEXT PRIMARY KEY,
       product_id TEXT NOT NULL,
@@ -65,7 +67,9 @@ function initTables(database: Database.Database) {
       success INTEGER NOT NULL DEFAULT 0,
       FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
     );
+  `);
 
+  await database.execute(`
     CREATE TABLE IF NOT EXISTS system_config (
       id TEXT PRIMARY KEY DEFAULT 'default',
       default_check_interval INTEGER NOT NULL DEFAULT 60,
@@ -81,51 +85,51 @@ function initTables(database: Database.Database) {
       wechat_enabled INTEGER NOT NULL DEFAULT 0,
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+  `);
 
+  await database.execute(`
     CREATE TABLE IF NOT EXISTS platform_cookies (
       platform TEXT PRIMARY KEY CHECK(platform IN ('taobao', 'jd', 'vipshop')),
       cookie TEXT NOT NULL DEFAULT '',
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
-
-    CREATE INDEX IF NOT EXISTS idx_price_records_product_id ON price_records(product_id);
-    CREATE INDEX IF NOT EXISTS idx_price_records_checked_at ON price_records(checked_at);
-    CREATE INDEX IF NOT EXISTS idx_notification_records_product_id ON notification_records(product_id);
   `);
+
+  await database.execute(`CREATE INDEX IF NOT EXISTS idx_price_records_product_id ON price_records(product_id);`);
+  await database.execute(`CREATE INDEX IF NOT EXISTS idx_price_records_checked_at ON price_records(checked_at);`);
+  await database.execute(`CREATE INDEX IF NOT EXISTS idx_notification_records_product_id ON notification_records(product_id);`);
 
   // 迁移：为已存在的 system_config 表添加 wechat 字段
   try {
-    database.exec(`
-      ALTER TABLE system_config ADD COLUMN wechat_webhook_url TEXT NOT NULL DEFAULT '';
-      ALTER TABLE system_config ADD COLUMN wechat_enabled INTEGER NOT NULL DEFAULT 0;
-    `);
+    await database.execute(`ALTER TABLE system_config ADD COLUMN wechat_webhook_url TEXT NOT NULL DEFAULT ''`);
+    await database.execute(`ALTER TABLE system_config ADD COLUMN wechat_enabled INTEGER NOT NULL DEFAULT 0`);
   } catch {
     // 字段已存在，忽略
   }
 
   // 初始化默认配置
-  const config = database.prepare('SELECT id FROM system_config WHERE id = ?').get('default');
-  if (!config) {
-    database.prepare(`
-      INSERT INTO system_config (id, default_check_interval, max_products)
-      VALUES ('default', 60, 50)
-    `).run();
+  const config = await database.execute({ sql: 'SELECT id FROM system_config WHERE id = ?', args: ['default'] });
+  if (config.rows.length === 0) {
+    await database.execute({
+      sql: `INSERT INTO system_config (id, default_check_interval, max_products) VALUES ('default', 60, 50)`,
+      args: [],
+    });
   }
 }
 
 // ============ Product CRUD ============
 
-export function getAllProducts(): Product[] {
-  const rows = getDb().prepare('SELECT * FROM products ORDER BY created_at DESC').all() as Record<string, unknown>[];
-  return rows.map(mapProduct);
+export async function getAllProducts(): Promise<Product[]> {
+  const result = await (await getDb()).execute('SELECT * FROM products ORDER BY created_at DESC');
+  return result.rows.map(mapProduct);
 }
 
-export function getProduct(id: string): Product | null {
-  const row = getDb().prepare('SELECT * FROM products WHERE id = ?').get(id) as Record<string, unknown> | undefined;
-  return row ? mapProduct(row) : null;
+export async function getProduct(id: string): Promise<Product | null> {
+  const result = await (await getDb()).execute({ sql: 'SELECT * FROM products WHERE id = ?', args: [id] });
+  return result.rows.length > 0 ? mapProduct(result.rows[0]) : null;
 }
 
-export function createProduct(data: {
+export async function createProduct(data: {
   name: string;
   platform: string;
   url: string;
@@ -133,17 +137,18 @@ export function createProduct(data: {
   targetPrice: number;
   imageUrl?: string;
   checkInterval?: number;
-}): Product {
+}): Promise<Product> {
   const id = uuidv4();
   const now = new Date().toISOString();
-  getDb().prepare(`
-    INSERT INTO products (id, name, platform, url, product_id, target_price, image_url, check_interval, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, data.name, data.platform, data.url, data.productId, data.targetPrice, data.imageUrl || null, data.checkInterval || 60, now, now);
-  return getProduct(id)!;
+  await (await getDb()).execute({
+    sql: `INSERT INTO products (id, name, platform, url, product_id, target_price, image_url, check_interval, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    args: [id, data.name, data.platform, data.url, data.productId, data.targetPrice, data.imageUrl || null, data.checkInterval || 60, now, now],
+  });
+  return (await getProduct(id))!;
 }
 
-export function updateProduct(id: string, data: Partial<{
+export async function updateProduct(id: string, data: Partial<{
   name: string;
   url: string;
   targetPrice: number;
@@ -153,9 +158,9 @@ export function updateProduct(id: string, data: Partial<{
   originalPrice: number | null;
   imageUrl: string | null;
   lastCheckedAt: string | null;
-}>): Product | null {
+}>): Promise<Product | null> {
   const fields: string[] = [];
-  const values: unknown[] = [];
+  const values: (string | number | null)[] = [];
 
   const fieldMap: Record<string, string> = {
     name: 'name',
@@ -172,7 +177,7 @@ export function updateProduct(id: string, data: Partial<{
   for (const [key, col] of Object.entries(fieldMap)) {
     if (key in data) {
       fields.push(`${col} = ?`);
-      values.push((data as Record<string, unknown>)[key]);
+      values.push((data as Record<string, unknown>)[key] as string | number | null);
     }
   }
 
@@ -182,23 +187,26 @@ export function updateProduct(id: string, data: Partial<{
   values.push(new Date().toISOString());
   values.push(id);
 
-  getDb().prepare(`UPDATE products SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+  await (await getDb()).execute({
+    sql: `UPDATE products SET ${fields.join(', ')} WHERE id = ?`,
+    args: values,
+  });
   return getProduct(id);
 }
 
-export function deleteProduct(id: string): boolean {
-  const result = getDb().prepare('DELETE FROM products WHERE id = ?').run(id);
-  return result.changes > 0;
+export async function deleteProduct(id: string): Promise<boolean> {
+  const result = await (await getDb()).execute({ sql: 'DELETE FROM products WHERE id = ?', args: [id] });
+  return result.rowsAffected > 0;
 }
 
-export function getProductCount(): number {
-  const row = getDb().prepare('SELECT COUNT(*) as count FROM products').get() as { count: number };
-  return row.count;
+export async function getProductCount(): Promise<number> {
+  const result = await (await getDb()).execute('SELECT COUNT(*) as count FROM products');
+  return Number(result.rows[0]?.['count'] ?? 0);
 }
 
 // ============ Price Records ============
 
-export function addPriceRecord(data: {
+export async function addPriceRecord(data: {
   productId: string;
   price: number;
   originalPrice?: number;
@@ -206,81 +214,85 @@ export function addPriceRecord(data: {
   couponDiscount?: number;
   promotionDiscount?: number;
   finalPrice: number;
-}): PriceRecord {
+}): Promise<PriceRecord> {
   const id = uuidv4();
   const now = new Date().toISOString();
-  getDb().prepare(`
-    INSERT INTO price_records (id, product_id, price, original_price, discount, coupon_discount, promotion_discount, final_price, checked_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, data.productId, data.price, data.originalPrice || null, data.discount || null, data.couponDiscount || null, data.promotionDiscount || null, data.finalPrice, now);
+  await (await getDb()).execute({
+    sql: `INSERT INTO price_records (id, product_id, price, original_price, discount, coupon_discount, promotion_discount, final_price, checked_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    args: [id, data.productId, data.price, data.originalPrice || null, data.discount || null, data.couponDiscount || null, data.promotionDiscount || null, data.finalPrice, now],
+  });
 
   // 同时更新商品的当前价格
-  updateProduct(data.productId, {
+  await updateProduct(data.productId, {
     currentPrice: data.finalPrice,
     originalPrice: data.originalPrice || null,
     lastCheckedAt: now,
   });
 
-  return getPriceRecord(id)!;
+  return (await getPriceRecord(id))!;
 }
 
-export function getPriceRecord(id: string): PriceRecord | null {
-  const row = getDb().prepare('SELECT * FROM price_records WHERE id = ?').get(id) as Record<string, unknown> | undefined;
-  return row ? mapPriceRecord(row) : null;
+export async function getPriceRecord(id: string): Promise<PriceRecord | null> {
+  const result = await (await getDb()).execute({ sql: 'SELECT * FROM price_records WHERE id = ?', args: [id] });
+  return result.rows.length > 0 ? mapPriceRecord(result.rows[0]) : null;
 }
 
-export function getPriceHistory(productId: string, limit = 30): PriceRecord[] {
-  const rows = getDb().prepare(
-    'SELECT * FROM price_records WHERE product_id = ? ORDER BY checked_at DESC LIMIT ?'
-  ).all(productId, limit) as Record<string, unknown>[];
-  return rows.map(mapPriceRecord);
+export async function getPriceHistory(productId: string, limit = 30): Promise<PriceRecord[]> {
+  const result = await (await getDb()).execute({
+    sql: 'SELECT * FROM price_records WHERE product_id = ? ORDER BY checked_at DESC LIMIT ?',
+    args: [productId, limit],
+  });
+  return result.rows.map(mapPriceRecord);
 }
 
 // ============ Notification Records ============
 
-export function addNotificationRecord(data: {
+export async function addNotificationRecord(data: {
   productId: string;
   type: 'price_reached' | 'price_drop' | 'price_rise' | 'error';
   message: string;
   currentPrice: number;
   targetPrice: number;
   success: boolean;
-}): NotificationRecord {
+}): Promise<NotificationRecord> {
   const id = uuidv4();
-  getDb().prepare(`
-    INSERT INTO notification_records (id, product_id, type, message, current_price, target_price, success)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(id, data.productId, data.type, data.message, data.currentPrice, data.targetPrice, data.success ? 1 : 0);
-  return getNotificationRecord(id)!;
+  await (await getDb()).execute({
+    sql: `INSERT INTO notification_records (id, product_id, type, message, current_price, target_price, success)
+      VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    args: [id, data.productId, data.type, data.message, data.currentPrice, data.targetPrice, data.success ? 1 : 0],
+  });
+  return (await getNotificationRecord(id))!;
 }
 
-export function getNotificationRecord(id: string): NotificationRecord | null {
-  const row = getDb().prepare('SELECT * FROM notification_records WHERE id = ?').get(id) as Record<string, unknown> | undefined;
-  return row ? mapNotificationRecord(row) : null;
+export async function getNotificationRecord(id: string): Promise<NotificationRecord | null> {
+  const result = await (await getDb()).execute({ sql: 'SELECT * FROM notification_records WHERE id = ?', args: [id] });
+  return result.rows.length > 0 ? mapNotificationRecord(result.rows[0]) : null;
 }
 
-export function getNotifications(limit = 50): NotificationRecord[] {
-  const rows = getDb().prepare(
-    'SELECT * FROM notification_records ORDER BY sent_at DESC LIMIT ?'
-  ).all(limit) as Record<string, unknown>[];
-  return rows.map(mapNotificationRecord);
+export async function getNotifications(limit = 50): Promise<NotificationRecord[]> {
+  const result = await (await getDb()).execute({
+    sql: 'SELECT * FROM notification_records ORDER BY sent_at DESC LIMIT ?',
+    args: [limit],
+  });
+  return result.rows.map(mapNotificationRecord);
 }
 
 // ============ System Config ============
 
-export function getSystemConfig(): SystemConfig {
-  const row = getDb().prepare('SELECT * FROM system_config WHERE id = ?').get('default') as Record<string, unknown>;
-  return mapSystemConfig(row);
+export async function getSystemConfig(): Promise<SystemConfig> {
+  const result = await (await getDb()).execute({ sql: 'SELECT * FROM system_config WHERE id = ?', args: ['default'] });
+  return mapSystemConfig(result.rows[0]);
 }
 
-export function updateSystemConfig(data: Partial<{
+export async function updateSystemConfig(data: Partial<{
   defaultCheckInterval: number;
   maxProducts: number;
   emailConfig: EmailConfig;
   wechatConfig: WechatConfig;
-}>): SystemConfig {
+}>): Promise<SystemConfig> {
   const fields: string[] = [];
-  const values: unknown[] = [];
+  const values: (string | number)[] = [];
 
   if (data.defaultCheckInterval !== undefined) {
     fields.push('default_check_interval = ?');
@@ -313,7 +325,10 @@ export function updateSystemConfig(data: Partial<{
   if (fields.length > 0) {
     fields.push("updated_at = ?");
     values.push(new Date().toISOString());
-    getDb().prepare(`UPDATE system_config SET ${fields.join(', ')} WHERE id = 'default'`).run(...values);
+    await (await getDb()).execute({
+      sql: `UPDATE system_config SET ${fields.join(', ')} WHERE id = 'default'`,
+      args: values,
+    });
   }
 
   return getSystemConfig();
@@ -321,9 +336,10 @@ export function updateSystemConfig(data: Partial<{
 
 // ============ Platform Cookies ============
 
-export function getPlatformCookie(platform: Platform): PlatformCookie | null {
-  const row = getDb().prepare('SELECT * FROM platform_cookies WHERE platform = ?').get(platform) as Record<string, unknown> | undefined;
-  if (!row) return null;
+export async function getPlatformCookie(platform: Platform): Promise<PlatformCookie | null> {
+  const result = await (await getDb()).execute({ sql: 'SELECT * FROM platform_cookies WHERE platform = ?', args: [platform] });
+  if (result.rows.length === 0) return null;
+  const row = result.rows[0];
   return {
     platform: row.platform as Platform,
     cookie: row.cookie as string,
@@ -331,28 +347,29 @@ export function getPlatformCookie(platform: Platform): PlatformCookie | null {
   };
 }
 
-export function getAllPlatformCookies(): PlatformCookie[] {
-  const rows = getDb().prepare('SELECT * FROM platform_cookies').all() as Record<string, unknown>[];
-  return rows.map(row => ({
+export async function getAllPlatformCookies(): Promise<PlatformCookie[]> {
+  const result = await (await getDb()).execute('SELECT * FROM platform_cookies');
+  return result.rows.map(row => ({
     platform: row.platform as Platform,
     cookie: row.cookie as string,
     updatedAt: row.updated_at as string,
   }));
 }
 
-export function savePlatformCookie(platform: Platform, cookie: string): PlatformCookie {
+export async function savePlatformCookie(platform: Platform, cookie: string): Promise<PlatformCookie> {
   const now = new Date().toISOString();
-  getDb().prepare(`
-    INSERT INTO platform_cookies (platform, cookie, updated_at)
-    VALUES (?, ?, ?)
-    ON CONFLICT(platform) DO UPDATE SET cookie = ?, updated_at = ?
-  `).run(platform, cookie, now, cookie, now);
+  await (await getDb()).execute({
+    sql: `INSERT INTO platform_cookies (platform, cookie, updated_at)
+      VALUES (?, ?, ?)
+      ON CONFLICT(platform) DO UPDATE SET cookie = ?, updated_at = ?`,
+    args: [platform, cookie, now, cookie, now],
+  });
   return { platform, cookie, updatedAt: now };
 }
 
-export function deletePlatformCookie(platform: Platform): boolean {
-  const result = getDb().prepare('DELETE FROM platform_cookies WHERE platform = ?').run(platform);
-  return result.changes > 0;
+export async function deletePlatformCookie(platform: Platform): Promise<boolean> {
+  const result = await (await getDb()).execute({ sql: 'DELETE FROM platform_cookies WHERE platform = ?', args: [platform] });
+  return result.rowsAffected > 0;
 }
 
 // ============ Mapper Functions ============
@@ -365,12 +382,12 @@ function mapProduct(row: Record<string, unknown>): Product {
     url: row.url as string,
     productId: row.product_id as string,
     targetPrice: row.target_price as number,
-    currentPrice: row.current_price as number | null,
-    originalPrice: row.original_price as number | null,
-    imageUrl: row.image_url as string | null,
+    currentPrice: (row.current_price as number) ?? null,
+    originalPrice: (row.original_price as number) ?? null,
+    imageUrl: (row.image_url as string) ?? null,
     status: row.status as MonitorStatus,
     checkInterval: row.check_interval as number,
-    lastCheckedAt: row.last_checked_at as string | null,
+    lastCheckedAt: (row.last_checked_at as string) ?? null,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
   };
@@ -381,10 +398,10 @@ function mapPriceRecord(row: Record<string, unknown>): PriceRecord {
     id: row.id as string,
     productId: row.product_id as string,
     price: row.price as number,
-    originalPrice: row.original_price as number | null,
-    discount: row.discount as number | null,
-    couponDiscount: row.coupon_discount as number | null,
-    promotionDiscount: row.promotion_discount as number | null,
+    originalPrice: (row.original_price as number) ?? null,
+    discount: (row.discount as number) ?? null,
+    couponDiscount: (row.coupon_discount as number) ?? null,
+    promotionDiscount: (row.promotion_discount as number) ?? null,
     finalPrice: row.final_price as number,
     checkedAt: row.checked_at as string,
   };

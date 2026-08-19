@@ -5,7 +5,7 @@ import type { Platform } from '@/lib/types';
 // GET /api/cookies - 获取所有平台 Cookie
 export async function GET() {
   try {
-    const cookies = getAllPlatformCookies();
+    const cookies = await getAllPlatformCookies();
     // 返回时隐藏 Cookie 内容（只显示长度和更新时间）
     const safeCookies = cookies.map(c => ({
       platform: c.platform,
@@ -34,7 +34,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Cookie 不能为空' }, { status: 400 });
     }
 
-    const result = savePlatformCookie(platform as Platform, cookie);
+    const result = await savePlatformCookie(platform as Platform, cookie);
     return NextResponse.json({ success: true, data: result });
   } catch (error) {
     console.error('[API] 保存 Cookie 失败:', error);
@@ -52,7 +52,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ success: false, error: '无效的平台' }, { status: 400 });
     }
 
-    deletePlatformCookie(platform as Platform);
+    await deletePlatformCookie(platform as Platform);
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('[API] 删除 Cookie 失败:', error);

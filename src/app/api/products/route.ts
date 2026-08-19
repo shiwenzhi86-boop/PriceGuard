@@ -5,7 +5,7 @@ import { detectPlatform, extractProductId } from '@/lib/types';
 // GET /api/products - 获取所有商品
 export async function GET() {
   try {
-    const products = getAllProducts();
+    const products = await getAllProducts();
     return NextResponse.json({ success: true, data: products });
   } catch (error) {
     console.error('[API] 获取商品列表失败:', error);
@@ -33,8 +33,8 @@ export async function POST(request: NextRequest) {
     }
 
     // 检查数量限制
-    const config = getSystemConfig();
-    const count = getProductCount();
+    const config = await getSystemConfig();
+    const count = await getProductCount();
     if (count >= config.maxProducts) {
       return NextResponse.json({ success: false, error: `已达到最大监控数量限制 (${config.maxProducts})` }, { status: 400 });
     }
@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
     // 生成商品名称
     const productName = name || `监控商品-${productId || Date.now().toString().slice(-6)}`;
 
-    const product = createProduct({
+    const product = await createProduct({
       name: productName,
       platform,
       url,

@@ -6,7 +6,7 @@ import { testWechatWebhook } from '@/lib/wechat';
 // GET /api/config - 获取系统配置
 export async function GET() {
   try {
-    const config = getSystemConfig();
+    const config = await getSystemConfig();
     // 隐藏密码
     const safeConfig = {
       ...config,
@@ -48,7 +48,7 @@ export async function PUT(request: NextRequest) {
     if (defaultCheckInterval !== undefined) updateData.defaultCheckInterval = defaultCheckInterval;
     if (maxProducts !== undefined) updateData.maxProducts = maxProducts;
     if (emailConfig) {
-      const currentConfig = getSystemConfig();
+      const currentConfig = await getSystemConfig();
       updateData.emailConfig = {
         smtpHost: emailConfig.smtpHost ?? currentConfig.emailConfig.smtpHost,
         smtpPort: emailConfig.smtpPort ?? currentConfig.emailConfig.smtpPort,
@@ -60,14 +60,14 @@ export async function PUT(request: NextRequest) {
       };
     }
     if (wechatConfig) {
-      const currentConfig = getSystemConfig();
+      const currentConfig = await getSystemConfig();
       updateData.wechatConfig = {
         webhookUrl: wechatConfig.webhookUrl ?? currentConfig.wechatConfig.webhookUrl,
         enabled: wechatConfig.enabled ?? currentConfig.wechatConfig.enabled,
       };
     }
 
-    const config = updateSystemConfig(updateData);
+    const config = await updateSystemConfig(updateData);
     return NextResponse.json({ success: true, data: config });
   } catch (error) {
     console.error('[API] 更新配置失败:', error);
@@ -75,7 +75,7 @@ export async function PUT(request: NextRequest) {
   }
 }
 
-// POST /api/config/test-email - 测试邮件配置
+// POST /api/config/test-email - 测试邮件/企微配置
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();

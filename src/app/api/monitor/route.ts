@@ -7,8 +7,9 @@ import { sendWechatAlert } from '@/lib/wechat';
 // POST /api/monitor/run - 手动触发一次价格检查
 export async function POST() {
   try {
-    const products = getAllProducts().filter(p => p.status === 'active' || p.status === 'target_reached');
-    const config = getSystemConfig();
+    const allProducts = await getAllProducts();
+    const products = allProducts.filter(p => p.status === 'active' || p.status === 'target_reached');
+    const config = await getSystemConfig();
     const results: Array<{ productId: string; name: string; success: boolean; price?: number; notified?: boolean }> = [];
 
     for (const product of products) {
@@ -27,13 +28,13 @@ export async function POST() {
         const priceResult = await fetchProductPrice(product.productId, product.platform, product.url);
 
         if (!priceResult.success) {
-          updateProduct(product.id, { status: 'error' });
+          await updateProduct(product.id, { status: 'error' });
           results.push({ productId: product.id, name: product.name, success: false });
           continue;
         }
 
         // 记录价格
-        addPriceRecord({
+        await addPriceRecord({
           productId: product.id,
           price: priceResult.price,
           originalPrice: priceResult.originalPrice,
@@ -47,7 +48,7 @@ export async function POST() {
         let notified = false;
         if (priceResult.finalPrice <= product.targetPrice) {
           // 更新状态
-          updateProduct(product.id, { status: 'target_reached' });
+          await updateProduct(product.id, { status: 'target_reached' });
 
           // 发送邮件通知
           const emailSent = await sendPriceAlert(config.emailConfig, product, priceResult.finalPrice);
@@ -55,7 +56,7 @@ export async function POST() {
           // 发送企业微信通知
           const wechatSent = await sendWechatAlert(config.wechatConfig, product, priceResult.finalPrice);
 
-          addNotificationRecord({
+          await addNotificationRecord({
             productId: product.id,
             type: 'price_reached',
             message: `商品价格已达目标价！当前 ¥${priceResult.finalPrice}，目标 ¥${product.targetPrice}`,
@@ -68,7 +69,7 @@ export async function POST() {
         } else {
           // 检查价格变化趋势
           if (product.currentPrice && priceResult.finalPrice < product.currentPrice) {
-            addNotificationRecord({
+            await addNotificationRecord({
               productId: product.id,
               type: 'price_drop',
               message: `价格下降：¥${product.currentPrice} → ¥${priceResult.finalPrice}`,
@@ -77,7 +78,7 @@ export async function POST() {
               success: false,
             });
           }
-          updateProduct(product.id, { status: 'active' });
+          await updateProduct(product.id, { status: 'active' });
         }
 
         results.push({
@@ -114,7 +115,7 @@ export async function POST() {
 // GET /api/monitor/status - 获取监控状态
 export async function GET() {
   try {
-    const products = getAllProducts();
+    const products = await getAllProducts();
     const stats = {
       total: products.length,
       active: products.filter(p => p.status === 'active').length,

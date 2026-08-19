@@ -204,7 +204,7 @@ export async function fetchProductPrice(
   url: string
 ): Promise<PriceResult> {
   // 尝试获取该平台的 Cookie
-  const cookieData = getPlatformCookie(platform);
+  const cookieData = await getPlatformCookie(platform);
 
   if (cookieData?.cookie) {
     // 有 Cookie，尝试真实抓取

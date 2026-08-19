@@ -8,12 +8,12 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const product = getProduct(id);
+    const product = await getProduct(id);
     if (!product) {
       return NextResponse.json({ success: false, error: '商品不存在' }, { status: 404 });
     }
 
-    const priceHistory = getPriceHistory(id, 30);
+    const priceHistory = await getPriceHistory(id, 30);
     return NextResponse.json({ success: true, data: { ...product, priceHistory } });
   } catch (error) {
     console.error('[API] 获取商品详情失败:', error);
@@ -37,7 +37,7 @@ export async function PUT(
       checkInterval?: number;
     };
 
-    const existing = getProduct(id);
+    const existing = await getProduct(id);
     if (!existing) {
       return NextResponse.json({ success: false, error: '商品不存在' }, { status: 404 });
     }
@@ -54,7 +54,7 @@ export async function PUT(
     if (status !== undefined) updateData.status = status;
     if (checkInterval !== undefined) updateData.checkInterval = checkInterval;
 
-    const product = updateProduct(id, updateData);
+    const product = await updateProduct(id, updateData);
     return NextResponse.json({ success: true, data: product });
   } catch (error) {
     console.error('[API] 更新商品失败:', error);
@@ -69,7 +69,7 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const deleted = deleteProduct(id);
+    const deleted = await deleteProduct(id);
     if (!deleted) {
       return NextResponse.json({ success: false, error: '商品不存在' }, { status: 404 });
     }

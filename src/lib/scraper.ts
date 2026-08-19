@@ -83,6 +83,15 @@ export async function launchLoginBrowser(platform: Platform = 'jd'): Promise<{ s
     }
 
     const chromePath = findChromePath();
+    
+    if (!chromePath) {
+      return {
+        success: false,
+        message: '未找到 Google Chrome 浏览器。请安装 Chrome 或检查安装路径。',
+      };
+    }
+
+    console.log(`[Scraper] 找到 Chrome: ${chromePath}`);
 
     const browser = await puppeteer.launch({
       headless: false, // 有头模式，可以看到窗口
@@ -130,6 +139,8 @@ export async function launchLoginBrowser(platform: Platform = 'jd'): Promise<{ s
 
     const loginUrl = loginUrls[platform];
     const platformName = platformNames[platform];
+
+    console.log(`[Scraper] 正在打开 ${platformName} 登录页面：${loginUrl}`);
 
     await page.goto(loginUrl, {
       waitUntil: 'networkidle0',

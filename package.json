@@ -61,6 +61,7 @@
     "next-themes": "^0.4.6",
     "nodemailer": "^9.0.5",
     "pg": "^8.16.3",
+    "puppeteer": "^25.8.0",
     "react": "19.2.3",
     "react-day-picker": "^9.13.0",
     "react-dom": "19.2.3",

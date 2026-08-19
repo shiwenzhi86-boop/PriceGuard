@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { Save, TestTube, CheckCircle, XCircle, Loader2, Cookie, Trash2, RefreshCw } from 'lucide-react';
+import { Save, TestTube, CheckCircle, XCircle, Loader2, Cookie } from 'lucide-react';
 
 interface EmailConfig {
   smtpHost: string;
@@ -22,13 +22,6 @@ interface WechatConfig {
   enabled: boolean;
 }
 
-interface CookieInfo {
-  platform: string;
-  hasCookie: boolean;
-  cookieLength: number;
-  updatedAt: string;
-}
-
 interface SystemConfig {
   id: string;
   defaultCheckInterval: number;
@@ -38,16 +31,8 @@ interface SystemConfig {
   updatedAt: string;
 }
 
-const PLATFORM_NAMES: Record<string, string> = {
-  taobao: '淘宝',
-  jd: '京东',
-  vipshop: '唯品会',
-};
-
 export function SettingsPanel() {
   const [config, setConfig] = useState<SystemConfig | null>(null);
-  const [cookies, setCookies] = useState<CookieInfo[]>([]);
-  const [cookieInputs, setCookieInputs] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -56,7 +41,6 @@ export function SettingsPanel() {
 
   useEffect(() => {
     fetchConfig();
-    fetchCookies();
   }, []);
 
   const fetchConfig = async () => {
@@ -70,18 +54,6 @@ export function SettingsPanel() {
       console.error('获取配置失败:', error);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const fetchCookies = async () => {
-    try {
-      const res = await fetch('/api/cookies');
-      const data = await res.json();
-      if (data.success) {
-        setCookies(data.data);
-      }
-    } catch (error) {
-      console.error('获取 Cookie 状态失败:', error);
     }
   };
 
@@ -150,37 +122,6 @@ export function SettingsPanel() {
     });
   };
 
-  const handleSaveCookie = async (platform: string) => {
-    const cookie = cookieInputs[platform]?.trim();
-    if (!cookie) return;
-    try {
-      const res = await fetch('/api/cookies', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ platform, cookie }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setCookieInputs(prev => ({ ...prev, [platform]: '' }));
-        fetchCookies();
-      }
-    } catch (error) {
-      console.error('保存 Cookie 失败:', error);
-    }
-  };
-
-  const handleDeleteCookie = async (platform: string) => {
-    try {
-      const res = await fetch(`/api/cookies?platform=${platform}`, { method: 'DELETE' });
-      const data = await res.json();
-      if (data.success) {
-        fetchCookies();
-      }
-    } catch (error) {
-      console.error('删除 Cookie 失败:', error);
-    }
-  };
-
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -230,69 +171,52 @@ export function SettingsPanel() {
         </div>
       </div>
 
-      {/* Cookie Management */}
+      {/* Puppeteer Browser Settings */}
       <div className="bg-[#1A1D27] border border-[#2D3348] rounded-xl p-6">
         <div className="flex items-center gap-2 mb-4">
           <Cookie className="w-5 h-5 text-blue-400" />
-          <h3 className="text-lg font-semibold text-white">浏览器 Cookie 管理</h3>
+          <h3 className="text-lg font-semibold text-white">浏览器自动抓取</h3>
         </div>
         <p className="text-sm text-[#94A3B8] mb-4">
-          在浏览器登录对应平台后，F12 → Network → 复制请求头中的 Cookie 粘贴到下方。
-          系统会带着你的登录态获取真实价格（含优惠券、会员价等）。
+          系统使用 Puppeteer 真实浏览器访问商品页面，提取实际显示的价格。
+          首次使用时需要在浏览器中登录一次，之后登录态会自动保存。
         </p>
-        <div className="space-y-4">
-          {(['taobao', 'jd', 'vipshop'] as const).map(platform => {
-            const info = cookies.find(c => c.platform === platform);
-            return (
-              <div key={platform} className="p-4 rounded-lg bg-[#0F1117] border border-[#2D3348]">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-white">{PLATFORM_NAMES[platform]}</span>
-                    {info?.hasCookie ? (
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">
-                        已配置 ({info.cookieLength} 字符)
-                      </span>
-                    ) : (
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-[#2D3348] text-[#94A3B8]">
-                        未配置
-                      </span>
-                    )}
-                  </div>
-                  {info?.hasCookie && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDeleteCookie(platform)}
-                      className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  )}
-                </div>
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="粘贴 Cookie 字符串..."
-                    value={cookieInputs[platform] || ''}
-                    onChange={e => setCookieInputs(prev => ({ ...prev, [platform]: e.target.value }))}
-                    className="bg-[#1A1D27] border-[#2D3348] text-white text-sm placeholder:text-[#94A3B8]"
-                  />
-                  <Button
-                    size="sm"
-                    onClick={() => handleSaveCookie(platform)}
-                    disabled={!cookieInputs[platform]?.trim()}
-                    className="bg-blue-500 hover:bg-blue-600 text-white shrink-0"
-                  >
-                    保存
-                  </Button>
-                </div>
-              </div>
-            );
-          })}
+        <div className="p-4 rounded-lg bg-[#0F1117] border border-[#2D3348] space-y-3">
+          <div className="flex items-start gap-3">
+            <span className="text-blue-400 font-bold text-lg shrink-0">1</span>
+            <div>
+              <p className="text-sm text-white font-medium">首次登录</p>
+              <p className="text-xs text-[#94A3B8] mt-1">
+                运行 <code className="px-1 py-0.5 bg-[#2D3348] rounded text-blue-300">pnpm dev</code> 后，
+                系统会自动打开浏览器。在浏览器中登录京东/淘宝/唯品会。
+              </p>
+            </div>
+          </div>
+          <div className="flex items-start gap-3">
+            <span className="text-blue-400 font-bold text-lg shrink-0">2</span>
+            <div>
+              <p className="text-sm text-white font-medium">登录态保存</p>
+              <p className="text-xs text-[#94A3B8] mt-1">
+                登录后关闭浏览器窗口，登录态会保存在 <code className="px-1 py-0.5 bg-[#2D3348] rounded text-blue-300">data/browser-profile/</code> 目录。
+                下次抓取时自动复用，无需重新登录。
+              </p>
+            </div>
+          </div>
+          <div className="flex items-start gap-3">
+            <span className="text-blue-400 font-bold text-lg shrink-0">3</span>
+            <div>
+              <p className="text-sm text-white font-medium">开始监控</p>
+              <p className="text-xs text-[#94A3B8] mt-1">
+                添加商品后点击「立即检查」，系统会用真实浏览器访问商品页面，提取实际价格。
+                价格不准？检查浏览器是否已登录对应平台。
+              </p>
+            </div>
+          </div>
         </div>
-        <div className="mt-3 p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
-          <p className="text-xs text-blue-300">
-            <strong>提示：</strong>Cookie 有效期通常为 1-7 天。过期后系统会自动降级为模拟数据。
-            未配置 Cookie 的平台将使用模拟价格数据。
+        <div className="mt-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+          <p className="text-xs text-amber-300">
+            <strong>注意：</strong>Cookie 过期或登录失效时，抓取会返回错误（不再使用模拟数据）。
+            此时需要重新在浏览器中登录。登录态有效期通常为 7-30 天。
           </p>
         </div>
       </div>

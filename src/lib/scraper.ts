@@ -1,14 +1,13 @@
+import puppeteer, { type Browser, type Page } from 'puppeteer';
+import path from 'path';
+import fs from 'fs';
 import type { Platform } from './types';
-import { getPlatformCookie } from './db';
 
 /**
- * 价格抓取引擎 - 基于浏览器 Cookie 的真实抓取
+ * 价格抓取引擎 - 基于 Puppeteer 真实浏览器抓取
  * 
- * 使用方式：
- * 1. 用户在浏览器登录淘宝/京东/唯品会
- * 2. F12 → Network → 复制请求头中的 Cookie
- * 3. 粘贴到系统设置页面的 Cookie 输入框
- * 4. 系统带着 Cookie 去请求真实价格
+ * 使用真实浏览器访问商品页面，提取实际显示的价格。
+ * 支持京东、淘宝/天猫、唯品会。
  */
 
 interface PriceResult {
@@ -25,219 +24,407 @@ interface PriceResult {
   source: 'real' | 'mock';
 }
 
+// 浏览器用户数据目录（保存登录态）
+const USER_DATA_DIR = path.join(process.cwd(), 'data', 'browser-profile');
+
+// 确保用户数据目录存在
+function ensureUserDataDir(): void {
+  const dir = path.dirname(USER_DATA_DIR);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+  if (!fs.existsSync(USER_DATA_DIR)) {
+    fs.mkdirSync(USER_DATA_DIR, { recursive: true });
+  }
+}
+
+// 全局浏览器实例（复用，避免每次启动）
+let browserInstance: Browser | null = null;
+
 /**
- * 解析 Cookie 字符串为键值对
+ * 获取或创建浏览器实例
  */
-function parseCookieString(cookieStr: string): Record<string, string> {
-  const cookies: Record<string, string> = {};
-  cookieStr.split(';').forEach(pair => {
-    const [key, ...rest] = pair.trim().split('=');
-    if (key) {
-      cookies[key.trim()] = rest.join('=').trim();
-    }
+async function getBrowser(): Promise<Browser> {
+  if (browserInstance && browserInstance.connected) {
+    return browserInstance;
+  }
+
+  ensureUserDataDir();
+
+  browserInstance = await puppeteer.launch({
+    headless: true,
+    userDataDir: USER_DATA_DIR,
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-blink-features=AutomationControlled',
+      '--window-size=1920,1080',
+    ],
+    defaultViewport: { width: 1920, height: 1080 },
   });
-  return cookies;
+
+  return browserInstance;
+}
+
+/**
+ * 创建新页面并设置反检测
+ */
+async function createPage(browser: Browser): Promise<Page> {
+  const page = await browser.newPage();
+  
+  // 设置 User-Agent
+  await page.setUserAgent(
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+  );
+
+  // 注入反检测脚本
+  await page.evaluateOnNewDocument(() => {
+    Object.defineProperty(navigator, 'webdriver', { get: () => false });
+    Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+    Object.defineProperty(navigator, 'languages', { get: () => ['zh-CN', 'zh', 'en'] });
+    (window as any).chrome = { runtime: {} };
+  });
+
+  return page;
 }
 
 /**
  * 京东价格抓取
- * 使用京东价格 API：https://p.3.cn/prices/mgets?skuIds=J_xxx
  */
-async function fetchJDPrice(productId: string, cookie: string): Promise<PriceResult | null> {
+async function fetchJDPrice(productId: string): Promise<PriceResult> {
+  const browser = await getBrowser();
+  const page = await createPage(browser);
+
   try {
-    const url = `https://p.3.cn/prices/mgets?skuIds=J_${productId}`;
-    const response = await fetch(url, {
-      headers: {
-        'Cookie': cookie,
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Referer': 'https://item.jd.com/',
-      },
+    // 方式1: 使用京东价格 API
+    const apiUrl = `https://p.3.cn/prices/mgets?skuIds=J_${productId}`;
+    const apiResponse = await page.goto(apiUrl, { waitUntil: 'networkidle0', timeout: 15000 });
+    
+    if (apiResponse?.ok()) {
+      const content = await page.content();
+      try {
+        const data = JSON.parse(content);
+        if (Array.isArray(data) && data.length > 0 && data[0].p) {
+          const price = parseFloat(data[0].p);
+          const originalPrice = parseFloat(data[0].m) || price;
+          
+          if (!isNaN(price) && price > 0) {
+            return {
+              success: true,
+              price,
+              originalPrice,
+              discount: 0,
+              couponDiscount: 0,
+              promotionDiscount: 0,
+              finalPrice: price,
+              source: 'real',
+            };
+          }
+        }
+      } catch {
+        // JSON 解析失败，继续尝试页面抓取
+      }
+    }
+
+    // 方式2: 访问商品页面提取价格
+    await page.goto(`https://item.jd.com/${productId}.html`, { 
+      waitUntil: 'networkidle0', 
+      timeout: 20000 
     });
 
-    if (!response.ok) return null;
+    // 等待价格元素加载
+    await page.waitForSelector('.p-price, .summary-price, .J-p-price', { timeout: 10000 }).catch(() => {});
 
-    const data = await response.json() as Array<{ p: string; m: string; id: string }>;
-    if (!data || data.length === 0) return null;
+    // 提取价格
+    const priceText = await page.evaluate(() => {
+      // 尝试多种选择器
+      const selectors = [
+        '.p-price .price',
+        '.summary-price .price',
+        '.J-p-price',
+        '[data-price]',
+        '.product-price .current',
+      ];
+      
+      for (const selector of selectors) {
+        const el = document.querySelector(selector);
+        if (el) {
+          const text = el.textContent?.trim() || '';
+          const match = text.match(/[\d.]+/);
+          if (match) return match[0];
+        }
+      }
+      
+      // 尝试从页面脚本中提取
+      const scripts = document.querySelectorAll('script');
+      for (const script of scripts) {
+        const text = script.textContent || '';
+        const match = text.match(/price\s*[:=]\s*["']?(\d+\.?\d*)/);
+        if (match) return match[1];
+      }
+      
+      return null;
+    });
 
-    const price = parseFloat(data[0].p);
-    const originalPrice = parseFloat(data[0].m) || price;
-
-    if (isNaN(price) || price <= 0) return null;
+    if (priceText) {
+      const price = parseFloat(priceText);
+      if (!isNaN(price) && price > 0) {
+        return {
+          success: true,
+          price,
+          originalPrice: price,
+          discount: 0,
+          couponDiscount: 0,
+          promotionDiscount: 0,
+          finalPrice: price,
+          source: 'real',
+        };
+      }
+    }
 
     return {
-      success: true,
-      price,
-      originalPrice,
+      success: false,
+      price: 0,
+      originalPrice: 0,
       discount: 0,
       couponDiscount: 0,
       promotionDiscount: 0,
-      finalPrice: price,
+      finalPrice: 0,
+      error: '未能从京东页面提取价格',
       source: 'real',
     };
-  } catch {
-    return null;
+  } catch (error) {
+    return {
+      success: false,
+      price: 0,
+      originalPrice: 0,
+      discount: 0,
+      couponDiscount: 0,
+      promotionDiscount: 0,
+      finalPrice: 0,
+      error: error instanceof Error ? error.message : '未知错误',
+      source: 'real',
+    };
+  } finally {
+    await page.close().catch(() => {});
   }
 }
 
 /**
- * 淘宝价格抓取
- * 通过商品详情页获取价格
+ * 淘宝/天猫价格抓取
  */
-async function fetchTaobaoPrice(productId: string, cookie: string): Promise<PriceResult | null> {
+async function fetchTaobaoPrice(productId: string, url: string): Promise<PriceResult> {
+  const browser = await getBrowser();
+  const page = await createPage(browser);
+
   try {
-    const url = `https://item.taobao.com/item.htm?id=${productId}`;
-    const response = await fetch(url, {
-      headers: {
-        'Cookie': cookie,
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Referer': 'https://www.taobao.com/',
-      },
-      redirect: 'follow',
+    // 访问商品页面
+    await page.goto(url, { waitUntil: 'networkidle0', timeout: 20000 });
+
+    // 等待价格元素加载
+    await page.waitForSelector('.price-current, .tb-rmb-num, .Price--priceInt--Yxs, [data-spm-price]', { timeout: 10000 }).catch(() => {});
+
+    // 额外等待以确保动态内容加载
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    // 提取价格
+    const priceText = await page.evaluate(() => {
+      const selectors = [
+        '.price-current .Price--priceText--nv7',
+        '.tb-rmb-num',
+        '.Price--priceInt--Yxs',
+        '[data-spm-price]',
+        '.price .val',
+        '.main-price .price',
+      ];
+      
+      for (const selector of selectors) {
+        const el = document.querySelector(selector);
+        if (el) {
+          const text = el.textContent?.trim() || '';
+          const match = text.match(/[\d.]+/);
+          if (match) return match[0];
+        }
+      }
+      
+      // 尝试从页面脚本中提取
+      const scripts = document.querySelectorAll('script');
+      for (const script of scripts) {
+        const text = script.textContent || '';
+        const match = text.match(/"price"\s*:\s*"(\d+\.?\d*)"/) || 
+                      text.match(/reservePrice["\s:]+(\d+\.?\d*)/);
+        if (match) return match[1];
+      }
+      
+      return null;
     });
 
-    if (!response.ok) return null;
-
-    const html = await response.text();
-
-    // 尝试从页面中提取价格
-    // 方式1: __INIT_DATA 中的 price
-    const priceMatch = html.match(/"price"\s*:\s*"(\d+\.?\d*)"/) || html.match(/"reservePrice"\s*:\s*"(\d+\.?\d*)"/);
-    // 方式2: g_config 中的价格
-    const configMatch = html.match(/g_config\s*=\s*\{[^}]*"price"\s*:\s*"(\d+\.?\d*)"/);
-
-    const priceStr = priceMatch?.[1] || configMatch?.[1];
-    if (!priceStr) return null;
-
-    const price = parseFloat(priceStr);
-    if (isNaN(price) || price <= 0) return null;
-
-    // 尝试提取原价
-    const originalMatch = html.match(/"originalPrice"\s*:\s*"(\d+\.?\d*)"/);
-    const originalPrice = originalMatch ? parseFloat(originalMatch[1]) : price;
+    if (priceText) {
+      const price = parseFloat(priceText);
+      if (!isNaN(price) && price > 0) {
+        return {
+          success: true,
+          price,
+          originalPrice: price,
+          discount: 0,
+          couponDiscount: 0,
+          promotionDiscount: 0,
+          finalPrice: price,
+          source: 'real',
+        };
+      }
+    }
 
     return {
-      success: true,
-      price,
-      originalPrice: originalPrice || price,
+      success: false,
+      price: 0,
+      originalPrice: 0,
       discount: 0,
       couponDiscount: 0,
       promotionDiscount: 0,
-      finalPrice: price,
+      finalPrice: 0,
+      error: '未能从淘宝/天猫页面提取价格',
       source: 'real',
     };
-  } catch {
-    return null;
+  } catch (error) {
+    return {
+      success: false,
+      price: 0,
+      originalPrice: 0,
+      discount: 0,
+      couponDiscount: 0,
+      promotionDiscount: 0,
+      finalPrice: 0,
+      error: error instanceof Error ? error.message : '未知错误',
+      source: 'real',
+    };
+  } finally {
+    await page.close().catch(() => {});
   }
 }
 
 /**
  * 唯品会价格抓取
  */
-async function fetchVipshopPrice(productId: string, cookie: string): Promise<PriceResult | null> {
+async function fetchVipshopPrice(productId: string, url: string): Promise<PriceResult> {
+  const browser = await getBrowser();
+  const page = await createPage(browser);
+
   try {
-    const url = `https://mapi.vip.com/vips-mobile/rest/shopping/pc/product/detail/v2?app_name=shop_pc&app_version=4.0&warehouse=VIP_SH&app_channel=pc&mobile_platform=android&province_id=0&api_key=70f71280d5d547b2a7bb370a529aeea1&user_id=&mars_cid=&wap_consumer=a&productId=${productId}`;
-    const response = await fetch(url, {
-      headers: {
-        'Cookie': cookie,
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Referer': 'https://www.vip.com/',
-      },
+    await page.goto(url, { waitUntil: 'networkidle0', timeout: 20000 });
+
+    // 等待价格元素加载
+    await page.waitForSelector('.price-current, .product-price, .sale-price', { timeout: 10000 }).catch(() => {});
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    const priceText = await page.evaluate(() => {
+      const selectors = [
+        '.price-current .num',
+        '.product-price .current',
+        '.sale-price .value',
+        '[class*="price"] [class*="num"]',
+      ];
+      
+      for (const selector of selectors) {
+        const el = document.querySelector(selector);
+        if (el) {
+          const text = el.textContent?.trim() || '';
+          const match = text.match(/[\d.]+/);
+          if (match) return match[0];
+        }
+      }
+      
+      return null;
     });
 
-    if (!response.ok) return null;
-
-    const data = await response.json() as { data?: { productDetail?: { salePrice?: string; marketPrice?: string } } };
-    if (!data?.data?.productDetail) return null;
-
-    const price = parseFloat(data.data.productDetail.salePrice || '');
-    const originalPrice = parseFloat(data.data.productDetail.marketPrice || '') || price;
-
-    if (isNaN(price) || price <= 0) return null;
+    if (priceText) {
+      const price = parseFloat(priceText);
+      if (!isNaN(price) && price > 0) {
+        return {
+          success: true,
+          price,
+          originalPrice: price,
+          discount: 0,
+          couponDiscount: 0,
+          promotionDiscount: 0,
+          finalPrice: price,
+          source: 'real',
+        };
+      }
+    }
 
     return {
-      success: true,
-      price,
-      originalPrice,
+      success: false,
+      price: 0,
+      originalPrice: 0,
       discount: 0,
       couponDiscount: 0,
       promotionDiscount: 0,
-      finalPrice: price,
+      finalPrice: 0,
+      error: '未能从唯品会页面提取价格',
       source: 'real',
     };
-  } catch {
-    return null;
+  } catch (error) {
+    return {
+      success: false,
+      price: 0,
+      originalPrice: 0,
+      discount: 0,
+      couponDiscount: 0,
+      promotionDiscount: 0,
+      finalPrice: 0,
+      error: error instanceof Error ? error.message : '未知错误',
+      source: 'real',
+    };
+  } finally {
+    await page.close().catch(() => {});
   }
 }
 
 /**
- * 模拟价格（当真实抓取失败时的降级方案）
- */
-function getMockPrice(productId: string, platform: Platform): PriceResult {
-  const hash = productId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-  const basePrice = 50 + (hash % 950);
-  const fluctuation = 1 + (Math.random() - 0.5) * 0.3;
-  const price = Math.round(basePrice * fluctuation * 100) / 100;
-  const discountRate = Math.random() * 0.2;
-  const discount = Math.round(price * discountRate * 100) / 100;
-  const couponDiscount = Math.random() > 0.5 ? Math.round((Math.random() * 20 + 5) * 100) / 100 : 0;
-  const promotionDiscount = Math.random() > 0.7 ? Math.round((Math.random() * 30 + 10) * 100) / 100 : 0;
-  const finalPrice = Math.max(0.01, price - discount - couponDiscount - promotionDiscount);
-
-  return {
-    success: true,
-    price: Math.round(price * 100) / 100,
-    originalPrice: Math.round(basePrice * 100) / 100,
-    discount: Math.round(discount * 100) / 100,
-    couponDiscount: Math.round(couponDiscount * 100) / 100,
-    promotionDiscount: Math.round(promotionDiscount * 100) / 100,
-    finalPrice: Math.round(finalPrice * 100) / 100,
-    source: 'mock',
-  };
-}
-
-/**
- * 抓取商品价格（优先真实抓取，失败则降级到模拟）
+ * 抓取商品价格（真实浏览器抓取，无模拟降级）
  */
 export async function fetchProductPrice(
   productId: string,
   platform: Platform,
   url: string
 ): Promise<PriceResult> {
-  // 尝试获取该平台的 Cookie
-  const cookieData = await getPlatformCookie(platform);
+  console.log(`[Scraper] 开始抓取 ${platform} 商品 ${productId}...`);
 
-  if (cookieData?.cookie) {
-    // 有 Cookie，尝试真实抓取
-    let result: PriceResult | null = null;
+  let result: PriceResult;
 
-    switch (platform) {
-      case 'jd':
-        result = await fetchJDPrice(productId, cookieData.cookie);
-        break;
-      case 'taobao':
-        result = await fetchTaobaoPrice(productId, cookieData.cookie);
-        break;
-      case 'vipshop':
-        result = await fetchVipshopPrice(productId, cookieData.cookie);
-        break;
-    }
-
-    if (result?.success) {
-      console.log(`[Scraper] ${platform} 真实价格抓取成功: ¥${result.finalPrice}`);
-      return result;
-    }
-
-    if (result === null) {
-      console.log(`[Scraper] ${platform} 真实抓取失败，使用模拟数据`);
-    } else {
-      console.log(`[Scraper] ${platform} 真实抓取返回异常: ${result.error}`);
-    }
-  } else {
-    console.log(`[Scraper] ${platform} 未配置 Cookie，使用模拟数据`);
+  switch (platform) {
+    case 'jd':
+      result = await fetchJDPrice(productId);
+      break;
+    case 'taobao':
+      result = await fetchTaobaoPrice(productId, url);
+      break;
+    case 'vipshop':
+      result = await fetchVipshopPrice(productId, url);
+      break;
+    default:
+      result = {
+        success: false,
+        price: 0,
+        originalPrice: 0,
+        discount: 0,
+        couponDiscount: 0,
+        promotionDiscount: 0,
+        finalPrice: 0,
+        error: `不支持的平台: ${platform}`,
+        source: 'real',
+      };
   }
 
-  // 降级到模拟数据
-  return getMockPrice(productId, platform);
+  if (result.success) {
+    console.log(`[Scraper] ${platform} 价格抓取成功: ¥${result.finalPrice}`);
+  } else {
+    console.log(`[Scraper] ${platform} 价格抓取失败: ${result.error}`);
+  }
+
+  return result;
 }
 
 /**
@@ -251,9 +438,17 @@ export async function fetchMultiplePrices(
   for (const item of items) {
     const result = await fetchProductPrice(item.productId, item.platform, item.url);
     results.set(item.productId, result);
-    // 请求间隔，避免触发反爬
-    await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000));
   }
 
   return results;
+}
+
+/**
+ * 关闭浏览器（用于清理）
+ */
+export async function closeBrowser(): Promise<void> {
+  if (browserInstance) {
+    await browserInstance.close();
+    browserInstance = null;
+  }
 }

@@ -71,6 +71,19 @@ export interface PlatformCookie {
   updatedAt: string;
 }
 
+// 价格抓取结果
+export interface PriceResult {
+  price?: number;
+  originalPrice?: number | null;
+  discount?: number | null;
+  couponDiscount?: number | null;
+  promotionDiscount?: number | null;
+  finalPrice?: number;
+  success: boolean;
+  source?: 'real' | 'simulated';
+  error?: string;
+}
+
 // 系统配置
 export interface SystemConfig {
   id: string;

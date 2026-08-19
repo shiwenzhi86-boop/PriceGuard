@@ -33,34 +33,36 @@ export async function POST() {
           continue;
         }
 
+        const finalPrice = priceResult.finalPrice ?? priceResult.price ?? 0;
+
         // 记录价格
         await addPriceRecord({
           productId: product.id,
-          price: priceResult.price,
-          originalPrice: priceResult.originalPrice,
-          discount: priceResult.discount,
-          couponDiscount: priceResult.couponDiscount,
-          promotionDiscount: priceResult.promotionDiscount,
-          finalPrice: priceResult.finalPrice,
+          price: priceResult.price ?? 0,
+          originalPrice: priceResult.originalPrice ?? undefined,
+          discount: priceResult.discount ?? undefined,
+          couponDiscount: priceResult.couponDiscount ?? undefined,
+          promotionDiscount: priceResult.promotionDiscount ?? undefined,
+          finalPrice,
         });
 
         // 检查是否达到目标价格
         let notified = false;
-        if (priceResult.finalPrice <= product.targetPrice) {
+        if (finalPrice <= product.targetPrice) {
           // 更新状态
           await updateProduct(product.id, { status: 'target_reached' });
 
           // 发送邮件通知
-          const emailSent = await sendPriceAlert(config.emailConfig, product, priceResult.finalPrice);
+          const emailSent = await sendPriceAlert(config.emailConfig, product, finalPrice);
 
           // 发送企业微信通知
-          const wechatSent = await sendWechatAlert(config.wechatConfig, product, priceResult.finalPrice);
+          const wechatSent = await sendWechatAlert(config.wechatConfig, product, finalPrice);
 
           await addNotificationRecord({
             productId: product.id,
             type: 'price_reached',
-            message: `商品价格已达目标价！当前 ¥${priceResult.finalPrice}，目标 ¥${product.targetPrice}`,
-            currentPrice: priceResult.finalPrice,
+            message: `商品价格已达目标价！当前 ¥${finalPrice}，目标 ¥${product.targetPrice}`,
+            currentPrice: finalPrice,
             targetPrice: product.targetPrice,
             success: emailSent || wechatSent,
           });
@@ -68,12 +70,12 @@ export async function POST() {
           notified = true;
         } else {
           // 检查价格变化趋势
-          if (product.currentPrice && priceResult.finalPrice < product.currentPrice) {
+          if (product.currentPrice && finalPrice < product.currentPrice) {
             await addNotificationRecord({
               productId: product.id,
               type: 'price_drop',
-              message: `价格下降：¥${product.currentPrice} → ¥${priceResult.finalPrice}`,
-              currentPrice: priceResult.finalPrice,
+              message: `价格下降：¥${product.currentPrice} → ¥${finalPrice}`,
+              currentPrice: finalPrice,
               targetPrice: product.targetPrice,
               success: false,
             });
@@ -85,7 +87,7 @@ export async function POST() {
           productId: product.id,
           name: product.name,
           success: true,
-          price: priceResult.finalPrice,
+          price: finalPrice,
           notified,
         });
       } catch (error) {

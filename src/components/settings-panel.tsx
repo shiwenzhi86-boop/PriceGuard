@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { Save, TestTube, CheckCircle, XCircle, Loader2, Cookie } from 'lucide-react';
+import { Save, TestTube, CheckCircle, XCircle, Loader2, LogIn, Cookie } from 'lucide-react';
 
 interface EmailConfig {
   smtpHost: string;
@@ -38,6 +38,8 @@ export function SettingsPanel() {
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; error?: string } | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [loggingIn, setLoggingIn] = useState(false);
+  const [loginResult, setLoginResult] = useState<{ success: boolean; message?: string } | null>(null);
 
   useEffect(() => {
     fetchConfig();
@@ -103,6 +105,24 @@ export function SettingsPanel() {
       setTestResult({ success: false, error: '网络错误' });
     } finally {
       setTesting(false);
+    }
+  };
+
+  const handleLogin = async (platform: 'jd' | 'taobao' | 'vip') => {
+    setLoggingIn(true);
+    setLoginResult(null);
+    try {
+      const res = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ platform }),
+      });
+      const data = await res.json();
+      setLoginResult(data);
+    } catch (error) {
+      setLoginResult({ success: false, message: '网络错误，请检查程序是否正常运行' });
+    } finally {
+      setLoggingIn(false);
     }
   };
 
@@ -218,6 +238,39 @@ export function SettingsPanel() {
             <strong>注意：</strong>Cookie 过期或登录失效时，抓取会返回错误（不再使用模拟数据）。
             此时需要重新在浏览器中登录。登录态有效期通常为 7-30 天。
           </p>
+        </div>
+
+        {/* Login Buttons */}
+        <div className="mt-4 space-y-3">
+          <p className="text-sm text-white font-medium">登录平台（首次使用必须）</p>
+          <div className="grid grid-cols-3 gap-3">
+            <button
+              onClick={() => handleLogin('jd')}
+              disabled={loggingIn}
+              className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-600 text-white text-sm font-medium rounded-lg transition-colors"
+            >
+              {loggingIn ? '打开中...' : '登录京东'}
+            </button>
+            <button
+              onClick={() => handleLogin('taobao')}
+              disabled={loggingIn}
+              className="px-4 py-2 bg-orange-600 hover:bg-orange-700 disabled:bg-gray-600 text-white text-sm font-medium rounded-lg transition-colors"
+            >
+              {loggingIn ? '打开中...' : '登录淘宝'}
+            </button>
+            <button
+              onClick={() => handleLogin('vip')}
+              disabled={loggingIn}
+              className="px-4 py-2 bg-pink-600 hover:bg-pink-700 disabled:bg-gray-600 text-white text-sm font-medium rounded-lg transition-colors"
+            >
+              {loggingIn ? '打开中...' : '登录唯品会'}
+            </button>
+          </div>
+          {loginResult && (
+            <div className={`p-3 rounded-lg text-sm ${loginResult.success ? 'bg-green-500/10 border border-green-500/20 text-green-300' : 'bg-red-500/10 border border-red-500/20 text-red-300'}`}>
+              {loginResult.message}
+            </div>
+          )}
         </div>
       </div>
 

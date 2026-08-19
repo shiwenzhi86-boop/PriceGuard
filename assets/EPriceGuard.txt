@@ -1,0 +1,160 @@
+E:\PriceGuard>
+git pull origin main --allow-unrelated-histories
+remote: Enumerating objects: 30, done.
+remote: Counting objects: 100% (30/30), done.
+remote: Compressing objects: 100% (2/2), done.
+remote: Total 16 (delta 15), reused 15 (delta 14), pack-reused 0 (from 0)
+Unpacking objects: 100% (16/16), 1.62 KiB | 1024 bytes/s, done.
+From https://github.com/shiwenzhi86-boop/PriceGuard
+ * branch            main       -> FETCH_HEAD
+   61586d2..db62497  main       -> origin/main
+error: Your local changes to the following files would be overwritten by merge:
+        src/app/api/login/route.ts
+        src/app/layout.tsx
+        src/components/settings-panel.tsx
+        src/lib/scraper.ts
+Please commit your changes or stash them before you merge.
+error: The following untracked working tree files would be overwritten by merge:
+        assets/image_20260819151107642.png
+        assets/image_20260819151830418.png
+        assets/image_20260819153130169.png
+        assets/image_20260819153358878.png
+        assets/image_20260819153504239.png
+        assets/image_20260819154309829.png
+        assets/image_20260819160223005.png
+        assets/image_20260819161022974.png
+        assets/image_20260819165927949.png
+        assets/image_20260819171701089.png
+        data/browser-profile/.org.chromium.Chromium.Local State.6D6rHA
+        data/browser-profile/.org.chromium.Chromium.Local State.bnT2Be
+        data/browser-profile/.org.chromium.Chromium.Local State.dYuiCo
+        data/browser-profile/.org.chromium.Chromium.Local State.mmz9x3
+        data/browser-profile/Default/Account Web Data
+        data/browser-profile/Default/Account Web Data-journal
+        data/browser-profile/Default/Affiliation Database
+        data/browser-profile/Default/Affiliation Database-journal
+        data/browser-profile/Default/AutofillAiModelCache/LOCK
+        data/browser-profile/Default/AutofillAiModelCache/LOG
+        data/browser-profile/Default/AutofillStrikeDatabase/LOCK
+        data/browser-profile/Default/AutofillStrikeDatabase/LOG
+        data/browser-profile/Default/BookmarkMergedSurfaceOrdering
+        data/browser-profile/Default/BudgetDatabase/LOCK
+        data/browser-profile/Default/BudgetDatabase/LOG
+        data/browser-profile/Default/Cache/Cache_Data/index
+        data/browser-profile/Default/Cache/No_Vary_Search/journal.baj
+        data/browser-profile/Default/Cache/No_Vary_Search/snapshot.baf
+        data/browser-profile/Default/ClientCertificates/LOCK
+        data/browser-profile/Default/ClientCertificates/LOG
+        data/browser-profile/Default/DIPS
+        data/browser-profile/Default/DIPS-wal
+        data/browser-profile/Default/DawnGraphiteCache/data_0
+        data/browser-profile/Default/DawnGraphiteCache/data_1
+        data/browser-profile/Default/DawnGraphiteCache/data_2
+        data/browser-profile/Default/DawnGraphiteCache/data_3
+        data/browser-profile/Default/DawnGraphiteCache/index
+        data/browser-profile/Default/DawnWebGPUCache/data_0
+        data/browser-profile/Default/DawnWebGPUCache/data_1
+        data/browser-profile/Default/DawnWebGPUCache/data_2
+        data/browser-profile/Default/DawnWebGPUCache/data_3
+        data/browser-profile/Default/DawnWebGPUCache/index
+        data/browser-profile/Default/Extension Rules/CURRENT
+        data/browser-profile/Default/Extension Rules/LOCK
+        data/browser-profile/Default/Extension Rules/LOG
+        data/browser-profile/Default/Extension Rules/MANIFEST-000001
+        data/browser-profile/Default/Extension Scripts/CURRENT
+        data/browser-profile/Default/Extension Scripts/LOCK
+        data/browser-profile/Default/Extension Scripts/LOG
+        data/browser-profile/Default/Extension Scripts/MANIFEST-000001
+        data/browser-profile/Default/Extension State/CURRENT
+        data/browser-profile/Default/Extension State/LOCK
+        data/browser-profile/Default/Extension State/LOG
+        data/browser-profile/Default/Extension State/MANIFEST-000001
+        data/browser-profile/Default/Favicons
+        data/browser-profile/Default/Favicons-journal
+        data/browser-profile/Default/GCM Store/CURRENT
+        data/browser-profile/Default/GCM Store/LOCK
+        data/browser-profile/Default/GCM Store/LOG
+        data/browser-profile/Default/GCM Store/MANIFEST-000001
+        data/browser-profile/Default/GPUCache/data_0
+        data/browser-profile/Default/GPUCache/data_1
+        data/browser-profile/Default/GPUCache/data_2
+        data/browser-profile/Default/GPUCache/data_3
+        data/browser-profile/Default/GPUCache/index
+        data/browser-profile/Default/History
+        data/browser-profile/Default/LOCK
+        data/browser-profile/Default/LOG
+        data/browser-profile/Default/Login Data
+        data/browser-profile/Default/Login Data For Account
+        data/browser-profile/Default/Login Data For Account-journal
+        data/browser-profile/Default/Login Data-journal
+        data/browser-profile/Default/MediaDeviceSalts
+        data/browser-profile/Default/MediaDeviceSalts-journal
+        data/browser-profile/Default/Network Action Predictor
+        data/browser-profile/Default/Network Action Predictor-journal
+        data/browser-profile/Default/PersistentOriginTrials/LOCK
+        data/browser-profile/Default/PersistentOriginTrials/LOG
+        data/browser-profile/Default/Preferences
+        data/browser-profile/Default/PreferredApps
+        da
+Aborting
+Merge with strategy ort failed.
+
+E:\PriceGuard>git checkout --theirs .
+Updated 4 paths from the index
+
+E:\PriceGuard>git add -A
+warning: in the working copy of 'data/browser-profile/ActorSafetyLists/9.5220.3721/listdata.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'data/browser-profile/ActorSafetyLists/9.5220.3721/manifest.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'data/browser-profile/AmountExtractionHeuristicRegexes/4/manifest.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'data/browser-profile/CaptchaProviders/8.5419.4434/captcha_providers.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'data/browser-profile/CaptchaProviders/8.5419.4434/manifest.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'data/browser-profile/CertificateRevocation/10724/LICENSE', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'data/browser-profile/CertificateRevocation/10724/manifest.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'data/browser-profile/Crowd Deny/2026.8.17.84/manifest.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'data/browser-profile/Default/Extension Rules/CURRENT', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'data/browser-profile/Default/Extension Rules/LOG', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'data/browser-profile/Default/Extension Scripts/CURRENT', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'data/browser-profile/Default/Extension Scripts/LOG', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'data/browser-profile/Default/Extension State/CURRENT', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'data/browser-profile/Default/Extension State/LOG', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'data/browser-profile/Default/Extension State/LOG.old', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'data/browser-profile/Default/GCM Store/CURRENT', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'data/browser-profile/Default/GCM Store/LOG', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'data/browser-profile/Default/GCM Store/LOG.old', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'data/browser-profile/Default/IndexedDB/https_passport.jd.com_0.indexeddb.leveldb/CURRENT', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'data/browser-profile/Default/IndexedDB/https_passport.jd.com_0.indexeddb.leveldb/LOG', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'data/browser-profile/Default/IndexedDB/https_www.taobao.com_0.indexeddb.leveldb/CURRENT', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'data/browser-profile/Default/IndexedDB/https_www.taobao.com_0.indexeddb.leveldb/LOG', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'data/browser-profile/Default/Local Storage/leveldb/CURRENT', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'data/browser-profile/Default/Local Storage/leveldb/LOG.old', LF will be replaced by CRLF the next time Git touches it
+error: open("data/browser-profile/Default/Network/Cookies"): Permission denied
+error: unable to index file 'data/browser-profile/Default/Network/Cookies'
+fatal: adding files failed
+
+E:\PriceGuard>git commit -m "merge: 合并远程代码"
+On branch main
+Your branch and 'origin/main' have diverged,
+and have 1 and 39 different commits each, respectively.
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+        assets/image_20260819151107642.png
+        assets/image_20260819151830418.png
+        assets/image_20260819153130169.png
+        assets/image_20260819153358878.png
+        assets/image_20260819153504239.png
+        assets/image_20260819154309829.png
+        assets/image_20260819160223005.png
+        assets/image_20260819161022974.png
+        assets/image_20260819165927949.png
+        assets/image_20260819171701089.png
+        data/browser-profile/
+
+nothing added to commit but untracked files present (use "git add" to track)
+
+E:\PriceGuard>git pull origin main
+From https://github.com/shiwenzhi86-boop/PriceGuard
+ * branch            main       -> FETCH_HEAD
+fatal: refusing to merge unrelated histories
+
+E:\PriceGuard>

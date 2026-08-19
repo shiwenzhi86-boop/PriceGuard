@@ -95,10 +95,12 @@ export async function launchLoginBrowser(platform: Platform = 'jd'): Promise<{ s
         '--window-size=1280,900',
       ],
       defaultViewport: { width: 1280, height: 900 },
-      ignoreHTTPSErrors: true,
     });
 
     const page = await browser.newPage();
+
+    // 忽略 HTTPS 错误
+    await page.setBypassCSP(true);
 
     // 反检测：隐藏 webdriver 特征
     await page.evaluateOnNewDocument(() => {

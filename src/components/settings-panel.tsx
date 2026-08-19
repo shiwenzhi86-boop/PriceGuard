@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { Save, TestTube, CheckCircle, XCircle, Loader2, LogIn, Cookie } from 'lucide-react';
+import { Save, TestTube, CheckCircle, XCircle, Loader2, LogIn, Cookie, RefreshCw, Download } from 'lucide-react';
 
 interface EmailConfig {
   smtpHost: string;
@@ -40,6 +40,8 @@ export function SettingsPanel() {
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [loggingIn, setLoggingIn] = useState(false);
   const [loginResult, setLoginResult] = useState<{ success: boolean; message?: string } | null>(null);
+  const [updating, setUpdating] = useState(false);
+  const [updateResult, setUpdateResult] = useState<{ success: boolean; message?: string } | null>(null);
 
   useEffect(() => {
     fetchConfig();
@@ -123,6 +125,22 @@ export function SettingsPanel() {
       setLoginResult({ success: false, message: '网络错误，请检查程序是否正常运行' });
     } finally {
       setLoggingIn(false);
+    }
+  };
+
+  const handleUpdate = async () => {
+    setUpdating(true);
+    setUpdateResult(null);
+    try {
+      const res = await fetch('/api/update', {
+        method: 'POST',
+      });
+      const data = await res.json();
+      setUpdateResult(data);
+    } catch (error) {
+      setUpdateResult({ success: false, message: '网络错误，请检查程序是否正常运行' });
+    } finally {
+      setUpdating(false);
     }
   };
 
@@ -272,6 +290,44 @@ export function SettingsPanel() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Update Section */}
+      <div className="bg-[#1A1D27] border border-[#2D3348] rounded-xl p-6">
+        <h3 className="text-lg font-semibold text-white mb-4">程序更新</h3>
+        <p className="text-sm text-[#94A3B8] mb-4">
+          点击「检查更新」从 GitHub 仓库拉取最新代码。更新完成后需要重启程序。
+        </p>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleUpdate}
+            disabled={updating}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2"
+          >
+            {updating ? (
+              <>
+                <RefreshCw className="w-4 h-4 animate-spin" />
+                更新中...
+              </>
+            ) : (
+              <>
+                <Download className="w-4 h-4" />
+                检查更新
+              </>
+            )}
+          </button>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-[#2D3348] hover:bg-[#3D4460] text-white text-sm font-medium rounded-lg transition-colors"
+          >
+            重启程序
+          </button>
+        </div>
+        {updateResult && (
+          <div className={`mt-3 p-3 rounded-lg text-sm ${updateResult.success ? 'bg-green-500/10 border border-green-500/20 text-green-300' : 'bg-red-500/10 border border-red-500/20 text-red-300'}`}>
+            {updateResult.message}
+          </div>
+        )}
       </div>
 
       {/* Email Settings */}

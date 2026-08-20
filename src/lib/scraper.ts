@@ -3,10 +3,15 @@
  * 使用本地 Chrome 浏览器访问商品页面，提取真实价格
  */
 
-import puppeteer, { type Browser, type Page } from 'puppeteer';
+import PuppeteerExtra from 'puppeteer-extra';
+import StealthPlugin from 'puppeteer-extra-plugin-stealth';
+import type { Browser, Page } from 'puppeteer';
 import path from 'path';
 import fs from 'fs';
 import type { Platform, PriceResult } from './types';
+
+// 使用 stealth 插件隐藏自动化特征
+PuppeteerExtra.use(StealthPlugin());
 
 // 浏览器实例（复用）
 let browserInstance: Browser | null = null;
@@ -52,7 +57,7 @@ async function getBrowser(): Promise<Browser> {
 
   const chromePath = findChromePath();
 
-  browserInstance = await puppeteer.launch({
+  browserInstance = await PuppeteerExtra.launch({
     headless: true,
     executablePath: chromePath, // 使用本地 Chrome
     userDataDir: BROWSER_PROFILE_DIR, // 持久化登录态
@@ -93,31 +98,20 @@ export async function launchLoginBrowser(platform: Platform = 'jd'): Promise<{ s
 
     console.log(`[Scraper] 找到 Chrome: ${chromePath}`);
 
-    const browser = await puppeteer.launch({
+    const browser = await PuppeteerExtra.launch({
       headless: false, // 有头模式，可以看到窗口
       executablePath: chromePath,
       userDataDir: BROWSER_PROFILE_DIR,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
-        '--disable-blink-features=AutomationControlled', // 隐藏自动化特征
+        '--disable-infobars', // 隐藏"Chrome 正受到自动测试软件的控制"提示
         '--window-size=1280,900',
       ],
-      defaultViewport: { width: 1280, height: 900 },
+      defaultViewport: null, // 使用默认视口，避免被检测
     });
 
     const page = await browser.newPage();
-
-    // 忽略 HTTPS 错误
-    await page.setBypassCSP(true);
-
-    // 反检测：隐藏 webdriver 特征
-    await page.evaluateOnNewDocument(() => {
-      Object.defineProperty(navigator, 'webdriver', { get: () => false });
-      Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
-      Object.defineProperty(navigator, 'languages', { get: () => ['zh-CN', 'zh', 'en'] });
-      (window as any).chrome = { runtime: {} };
-    });
 
     // 设置真实的 User-Agent
     await page.setUserAgent(

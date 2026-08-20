@@ -1,10 +1,15 @@
 // 平台枚举
 export type Platform = 'taobao' | 'jd' | 'vipshop';
 
-// 监控状态
-export type MonitorStatus = 'active' | 'target_reached' | 'error' | 'paused';
+// 监控状态（扩展）
+export type MonitorStatus = 
+  | 'active'              // 正常监控
+  | 'target_reached'      // 已达目标价
+  | 'auth_required'        // 需要人工介入（登录失效/验证码）
+  | 'error'               // 抓取错误
+  | 'paused';             // 已暂停
 
-// 商品
+// 商品（扩展）
 export interface Product {
   id: string;
   name: string;
@@ -18,6 +23,8 @@ export interface Product {
   status: MonitorStatus;
   checkInterval: number; // 检查间隔（分钟）
   lastCheckedAt: string | null;
+  authRequiredAt: string | null; // 需要人工介入的时间
+  authRequiredReason: string | null; // 需要人工介入的原因
   createdAt: string;
   updatedAt: string;
 }

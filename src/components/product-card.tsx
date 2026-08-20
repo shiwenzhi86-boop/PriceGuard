@@ -63,8 +63,14 @@ export function ProductCard({ product, platformInfo, statusBadge, onDelete, onPa
             {product.status === 'target_reached' && (
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1" />
             )}
-            {product.status === 'error' && (
+            {product.status === 'auth_required' && (
               <span className="w-1.5 h-1.5 rounded-full bg-red-400 mr-1 animate-blink" />
+            )}
+            {product.status === 'error' && (
+              <span className="w-1.5 h-1.5 rounded-full bg-orange-400 mr-1" />
+            )}
+            {product.status === 'paused' && (
+              <span className="w-1.5 h-1.5 rounded-full bg-gray-400 mr-1" />
             )}
             {statusBadge.label}
           </Badge>

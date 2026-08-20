@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getAllProducts, updateProduct, addPriceRecord, addNotificationRecord, getSystemConfig } from '@/lib/db';
 import { fetchProductPrice } from '@/lib/scraper';
-import { sendPriceAlert } from '@/lib/email';
-import { sendWechatAlert } from '@/lib/wechat';
+import { sendPriceAlert, sendAuthRequiredAlert } from '@/lib/email';
+import { sendWechatAlert, sendWechatAuthRequiredAlert } from '@/lib/wechat';
 
 // POST /api/monitor/run - 手动触发一次价格检查
 export async function POST() {
@@ -28,7 +28,31 @@ export async function POST() {
         const priceResult = await fetchProductPrice(product.productId, product.platform, product.url);
 
         if (!priceResult.success) {
-          await updateProduct(product.id, { status: 'error' });
+          // 检查是否需要人工介入
+          if (priceResult.error?.includes('AUTH_REQUIRED')) {
+            const authReason = priceResult.error.replace('AUTH_REQUIRED: ', '');
+            await updateProduct(product.id, { 
+              status: 'auth_required',
+              authRequiredAt: new Date().toISOString(),
+              authRequiredReason: authReason,
+            });
+            console.log(`[Monitor] 商品 ${product.name} 需要人工介入：${authReason}`);
+            
+            // 发送登录失效告警
+            await sendAuthRequiredAlert(config.emailConfig, product, authReason);
+            await sendWechatAuthRequiredAlert(config.wechatConfig, product, authReason);
+            
+            await addNotificationRecord({
+              productId: product.id,
+              type: 'price_drop',
+              message: `登录态失效或触发验证码：${authReason}`,
+              currentPrice: 0,
+              targetPrice: product.targetPrice,
+              success: true,
+            });
+          } else {
+            await updateProduct(product.id, { status: 'error' });
+          }
           results.push({ productId: product.id, name: product.name, success: false });
           continue;
         }
@@ -122,6 +146,7 @@ export async function GET() {
       total: products.length,
       active: products.filter(p => p.status === 'active').length,
       targetReached: products.filter(p => p.status === 'target_reached').length,
+      authRequired: products.filter(p => p.status === 'auth_required').length,
       error: products.filter(p => p.status === 'error').length,
       paused: products.filter(p => p.status === 'paused').length,
     };

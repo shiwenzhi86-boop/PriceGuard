@@ -32,9 +32,11 @@ async function initTables(database: Client) {
       current_price REAL,
       original_price REAL,
       image_url TEXT,
-      status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'target_reached', 'error', 'paused')),
+      status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'target_reached', 'auth_required', 'error', 'paused')),
       check_interval INTEGER NOT NULL DEFAULT 60,
       last_checked_at TEXT,
+      auth_required_at TEXT,
+      auth_required_reason TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -107,6 +109,14 @@ async function initTables(database: Client) {
     // 字段已存在，忽略
   }
 
+  // 迁移：为已存在的 products 表添加 auth_required 字段
+  try {
+    await database.execute(`ALTER TABLE products ADD COLUMN auth_required_at TEXT`);
+    await database.execute(`ALTER TABLE products ADD COLUMN auth_required_reason TEXT`);
+  } catch {
+    // 字段已存在，忽略
+  }
+
   // 初始化默认配置
   const config = await database.execute({ sql: 'SELECT id FROM system_config WHERE id = ?', args: ['default'] });
   if (config.rows.length === 0) {
@@ -158,6 +168,8 @@ export async function updateProduct(id: string, data: Partial<{
   originalPrice: number | null;
   imageUrl: string | null;
   lastCheckedAt: string | null;
+  authRequiredAt: string | null;
+  authRequiredReason: string | null;
 }>): Promise<Product | null> {
   const fields: string[] = [];
   const values: (string | number | null)[] = [];
@@ -172,6 +184,8 @@ export async function updateProduct(id: string, data: Partial<{
     originalPrice: 'original_price',
     imageUrl: 'image_url',
     lastCheckedAt: 'last_checked_at',
+    authRequiredAt: 'auth_required_at',
+    authRequiredReason: 'auth_required_reason',
   };
 
   for (const [key, col] of Object.entries(fieldMap)) {
@@ -388,6 +402,8 @@ function mapProduct(row: Record<string, unknown>): Product {
     status: row.status as MonitorStatus,
     checkInterval: row.check_interval as number,
     lastCheckedAt: (row.last_checked_at as string) ?? null,
+    authRequiredAt: (row.auth_required_at as string) ?? null,
+    authRequiredReason: (row.auth_required_reason as string) ?? null,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
   };

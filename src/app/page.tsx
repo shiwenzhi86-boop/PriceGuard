@@ -7,6 +7,7 @@ import { AddProductDialog } from '@/components/add-product-dialog';
 import { SettingsPanel } from '@/components/settings-panel';
 import { NotificationsPanel } from '@/components/notifications-panel';
 import { PriceChart } from '@/components/price-chart';
+import { FetchLogPanel } from '@/components/fetch-log-panel';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -21,8 +22,8 @@ import {
   Activity,
 } from 'lucide-react';
 
-type Tab = 'products' | 'notifications' | 'settings';
-type StatusFilter = 'all' | 'active' | 'target_reached' | 'error' | 'paused';
+type Tab = 'products' | 'notifications' | 'fetch-logs' | 'settings';
+type StatusFilter = 'all' | 'active' | 'target_reached' | 'auth_required' | 'error' | 'paused';
 
 export default function Home() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -34,7 +35,7 @@ export default function Home() {
   const [monitoring, setMonitoring] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [showChart, setShowChart] = useState(false);
-  const [stats, setStats] = useState({ total: 0, active: 0, targetReached: 0, error: 0, paused: 0 });
+  const [stats, setStats] = useState({ total: 0, active: 0, targetReached: 0, authRequired: 0, error: 0, paused: 0 });
 
   const fetchProducts = useCallback(async () => {
     try {
@@ -128,7 +129,8 @@ export default function Home() {
     switch (status) {
       case 'active': return { label: '监控中', className: 'bg-blue-500/20 text-blue-400 border-blue-500/30' };
       case 'target_reached': return { label: '已达目标', className: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' };
-      case 'error': return { label: '异常', className: 'bg-red-500/20 text-red-400 border-red-500/30' };
+      case 'auth_required': return { label: '需要登录', className: 'bg-red-500/20 text-red-400 border-red-500/30' };
+      case 'error': return { label: '异常', className: 'bg-orange-500/20 text-orange-400 border-orange-500/30' };
       case 'paused': return { label: '已暂停', className: 'bg-gray-500/20 text-gray-400 border-gray-500/30' };
       default: return { label: status, className: '' };
     }
@@ -176,7 +178,7 @@ export default function Home() {
       {/* Stats Bar */}
       <div className="border-b border-[#2D3348] bg-[#1A1D27]/50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
                 <ShoppingBag className="w-5 h-5 text-blue-400" />
@@ -209,6 +211,15 @@ export default function Home() {
                 <Bell className="w-5 h-5 text-red-400" />
               </div>
               <div>
+                <div className="text-2xl font-bold text-white tabular-nums">{stats.authRequired}</div>
+                <div className="text-xs text-[#94A3B8]">需要登录</div>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-orange-500/10 flex items-center justify-center">
+                <Activity className="w-5 h-5 text-orange-400" />
+              </div>
+              <div>
                 <div className="text-2xl font-bold text-white tabular-nums">{stats.error}</div>
                 <div className="text-xs text-[#94A3B8]">异常</div>
               </div>
@@ -224,6 +235,7 @@ export default function Home() {
             {[
               { id: 'products' as Tab, label: '商品列表', icon: ShoppingBag },
               { id: 'notifications' as Tab, label: '通知记录', icon: Bell },
+              { id: 'fetch-logs' as Tab, label: '抓取日志', icon: BarChart3 },
               { id: 'settings' as Tab, label: '系统设置', icon: Settings },
             ].map(tab => (
               <button
@@ -263,6 +275,7 @@ export default function Home() {
                   { value: 'all', label: '全部' },
                   { value: 'active', label: '监控中' },
                   { value: 'target_reached', label: '已达目标' },
+                  { value: 'auth_required', label: '需要登录' },
                   { value: 'error', label: '异常' },
                   { value: 'paused', label: '已暂停' },
                 ].map(filter => (
@@ -330,6 +343,7 @@ export default function Home() {
         )}
 
         {activeTab === 'notifications' && <NotificationsPanel />}
+        {activeTab === 'fetch-logs' && <FetchLogPanel />}
         {activeTab === 'settings' && <SettingsPanel />}
       </main>
 

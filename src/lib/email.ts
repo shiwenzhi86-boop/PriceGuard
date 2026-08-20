@@ -106,3 +106,65 @@ export async function testEmailConfig(emailConfig: EmailConfig): Promise<{ succe
     return { success: false, error: (error as Error).message };
   }
 }
+
+/**
+ * 发送登录失效告警
+ */
+export async function sendAuthRequiredAlert(
+  emailConfig: EmailConfig,
+  product: Product,
+  reason: string
+): Promise<boolean> {
+  if (!emailConfig.enabled || !emailConfig.smtpHost || !emailConfig.toEmail) {
+    console.log('[Email] 邮件通知未启用或配置不完整，跳过发送');
+    return false;
+  }
+
+  try {
+    const transporter = nodemailer.createTransport({
+      host: emailConfig.smtpHost,
+      port: emailConfig.smtpPort,
+      secure: emailConfig.smtpPort === 465,
+      auth: {
+        user: emailConfig.smtpUser,
+        pass: emailConfig.smtpPass,
+      },
+    });
+
+    const htmlContent = `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; background: #1A1D27; color: #E2E8F0; border-radius: 12px; overflow: hidden;">
+        <div style="background: #EF4444; padding: 24px; text-align: center;">
+          <h1 style="margin: 0; font-size: 24px; color: white;">⚠️ 登录失效告警</h1>
+        </div>
+        <div style="padding: 24px;">
+          <div style="background: #0F1117; border-radius: 8px; padding: 20px; margin-bottom: 16px;">
+            <h2 style="margin: 0 0 12px 0; font-size: 18px; color: #E2E8F0;">${product.name}</h2>
+            <div style="font-size: 14px; color: #94A3B8; margin-bottom: 8px;">平台：${product.platform}</div>
+            <div style="font-size: 14px; color: #EF4444; margin-bottom: 8px;">原因：${reason}</div>
+            <div style="font-size: 12px; color: #64748B;">时间：${new Date().toLocaleString('zh-CN')}</div>
+          </div>
+          <div style="background: #1E293B; border-radius: 8px; padding: 16px; border-left: 4px solid #EF4444;">
+            <p style="margin: 0; font-size: 14px; color: #E2E8F0;">
+              该商品的登录态已失效或触发验证码，价格监控已暂停。
+              <br /><br />
+              请尽快前往系统设置页面重新登录，以恢复监控。
+            </p>
+          </div>
+        </div>
+      </div>
+    `;
+
+    await transporter.sendMail({
+      from: `"PriceGuard" <${emailConfig.smtpUser}>`,
+      to: emailConfig.toEmail,
+      subject: `⚠️ PriceGuard 登录失效告警 - ${product.name}`,
+      html: htmlContent,
+    });
+
+    console.log(`[Email] 登录失效告警邮件已发送至 ${emailConfig.toEmail}`);
+    return true;
+  } catch (error) {
+    console.error('[Email] 登录失效告警邮件发送失败:', error);
+    return false;
+  }
+}

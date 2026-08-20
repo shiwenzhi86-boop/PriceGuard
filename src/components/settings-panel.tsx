@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { Badge } from '@/components/ui/badge';
 import { Save, TestTube, CheckCircle, XCircle, Loader2, LogIn, Cookie, RefreshCw, Download } from 'lucide-react';
 
 interface EmailConfig {
@@ -41,10 +42,27 @@ export function SettingsPanel() {
   const [loggingIn, setLoggingIn] = useState(false);
   const [loginResult, setLoginResult] = useState<{ success: boolean; message?: string } | null>(null);
   const [updating, setUpdating] = useState(false);
-  const [updateResult, setUpdateResult] = useState<{ success: boolean; message?: string } | null>(null);
+  const [updateResult, setUpdateResult] = useState<{ 
+      success: boolean; 
+      message?: string; 
+      oldVersion?: string; 
+      newVersion?: string; 
+      changelog?: string;
+      needRestart?: boolean;
+    } | null>(null);
+  const [versionInfo, setVersionInfo] = useState<{
+      local: { version: string; commitHash: string; commitDate: string; branch: string };
+      remote: { version: string; commitHash: string; commitDate: string; hasUpdate: boolean; changelog: string };
+    } | null>(null);
+  const [exportingCookie, setExportingCookie] = useState<string | null>(null);
+  const [importingCookie, setImportingCookie] = useState<string | null>(null);
+  const [cookieResult, setCookieResult] = useState<{ success: boolean; message?: string } | null>(null);
+  const [backingUp, setBackingUp] = useState(false);
+  const [backupResult, setBackupResult] = useState<{ success: boolean; message?: string } | null>(null);
 
   useEffect(() => {
     fetchConfig();
+    fetchVersionInfo();
   }, []);
 
   const fetchConfig = async () => {
@@ -58,6 +76,18 @@ export function SettingsPanel() {
       console.error('获取配置失败:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchVersionInfo = async () => {
+    try {
+      const res = await fetch('/api/version');
+      const data = await res.json();
+      if (data.success) {
+        setVersionInfo(data.data);
+      }
+    } catch (error) {
+      console.error('获取版本信息失败:', error);
     }
   };
 
@@ -142,6 +172,118 @@ export function SettingsPanel() {
     } finally {
       setUpdating(false);
     }
+  };
+
+  const handleExportCookies = async (platform: 'jd' | 'taobao' | 'vipshop') => {
+    setExportingCookie(platform);
+    setCookieResult(null);
+    try {
+      const res = await fetch(`/api/cookies?platform=${platform}`);
+      const data = await res.json();
+      if (data.success) {
+        // 下载 Cookie 文件
+        const blob = new Blob([JSON.stringify(data.data.cookies, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${platform}-cookies.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        setCookieResult({ success: true, message: `导出 ${platform} Cookie 成功，共 ${data.data.count} 个` });
+      } else {
+        setCookieResult({ success: false, message: data.error });
+      }
+    } catch (error) {
+      setCookieResult({ success: false, message: '导出失败' });
+    } finally {
+      setExportingCookie(null);
+    }
+  };
+
+  const handleImportCookies = async (platform: 'jd' | 'taobao' | 'vipshop') => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+
+      setImportingCookie(platform);
+      setCookieResult(null);
+      try {
+        const text = await file.text();
+        const cookies = JSON.parse(text);
+        const res = await fetch('/api/cookies', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ platform, cookies }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          setCookieResult({ success: true, message: `导入 ${platform} Cookie 成功，共 ${data.data.count} 个` });
+        } else {
+          setCookieResult({ success: false, message: data.error });
+        }
+      } catch (error) {
+        setCookieResult({ success: false, message: '导入失败，请检查文件格式' });
+      } finally {
+        setImportingCookie(null);
+      }
+    };
+    input.click();
+  };
+
+  const handleBackupProfile = async () => {
+    setBackingUp(true);
+    setBackupResult(null);
+    try {
+      const res = await fetch('/api/cookies/backup', {
+        method: 'POST',
+      });
+      const data = await res.json();
+      if (data.success) {
+        setBackupResult({ success: true, message: `备份成功！备份路径：${data.data.backupPath}` });
+      } else {
+        setBackupResult({ success: false, message: data.error });
+      }
+    } catch (error) {
+      setBackupResult({ success: false, message: '备份失败' });
+    } finally {
+      setBackingUp(false);
+    }
+  };
+
+  const handleRestoreProfile = async () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'application/json';
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+
+      setBackingUp(true);
+      setBackupResult(null);
+      try {
+        const text = await file.text();
+        const backupData = JSON.parse(text);
+        const res = await fetch('/api/cookies/restore', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ backupPath: backupData.backupPath }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          setBackupResult({ success: true, message: data.message || '恢复成功，请重启程序' });
+        } else {
+          setBackupResult({ success: false, message: data.error });
+        }
+      } catch (error) {
+        setBackupResult({ success: false, message: '恢复失败' });
+      } finally {
+        setBackingUp(false);
+      }
+    };
+    input.click();
   };
 
   const updateEmailConfig = (field: keyof EmailConfig, value: string | number | boolean) => {
@@ -290,11 +432,105 @@ export function SettingsPanel() {
             </div>
           )}
         </div>
+
+        {/* Cookie Management */}
+        <div className="mt-6 space-y-3">
+          <p className="text-sm text-white font-medium">Cookie 管理（高级）</p>
+          <p className="text-xs text-[#94A3B8]">
+            可以导出当前浏览器的 Cookie 进行备份，或导入之前保存的 Cookie 恢复登录态。
+          </p>
+          <div className="grid grid-cols-3 gap-3">
+            {(['jd', 'taobao', 'vipshop'] as const).map(platform => (
+              <div key={platform} className="space-y-2">
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleExportCookies(platform)}
+                    disabled={exportingCookie === platform}
+                    className="flex-1 px-3 py-1.5 bg-[#2D3348] hover:bg-[#3D4358] disabled:bg-gray-600 text-white text-xs rounded-lg transition-colors flex items-center justify-center gap-1"
+                  >
+                    <Download className="w-3 h-3" />
+                    {exportingCookie === platform ? '导出中...' : '导出'}
+                  </button>
+                  <button
+                    onClick={() => handleImportCookies(platform)}
+                    disabled={importingCookie === platform}
+                    className="flex-1 px-3 py-1.5 bg-[#2D3348] hover:bg-[#3D4358] disabled:bg-gray-600 text-white text-xs rounded-lg transition-colors flex items-center justify-center gap-1"
+                  >
+                    <Cookie className="w-3 h-3" />
+                    {importingCookie === platform ? '导入中...' : '导入'}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+          {cookieResult && (
+            <div className={`p-3 rounded-lg text-sm ${cookieResult.success ? 'bg-green-500/10 border border-green-500/20 text-green-300' : 'bg-red-500/10 border border-red-500/20 text-red-300'}`}>
+              {cookieResult.message}
+            </div>
+          )}
+        </div>
+
+        {/* Backup & Restore */}
+        <div className="mt-6 space-y-3">
+          <p className="text-sm text-white font-medium">用户数据备份与恢复</p>
+          <p className="text-xs text-[#94A3B8]">
+            备份整个浏览器用户数据目录（包含所有平台的登录态），防止 Cookie 丢失。
+          </p>
+          <div className="flex gap-3">
+            <button
+              onClick={handleBackupProfile}
+              disabled={backingUp}
+              className="flex-1 px-4 py-2 bg-[#2D3348] hover:bg-[#3D4358] disabled:bg-gray-600 text-white text-sm rounded-lg transition-colors flex items-center justify-center gap-2"
+            >
+              <Download className="w-4 h-4" />
+              {backingUp ? '备份中...' : '备份用户数据'}
+            </button>
+            <button
+              onClick={handleRestoreProfile}
+              disabled={backingUp}
+              className="flex-1 px-4 py-2 bg-[#2D3348] hover:bg-[#3D4358] disabled:bg-gray-600 text-white text-sm rounded-lg transition-colors flex items-center justify-center gap-2"
+            >
+              <RefreshCw className="w-4 h-4" />
+              {backingUp ? '恢复中...' : '恢复用户数据'}
+            </button>
+          </div>
+          {backupResult && (
+            <div className={`p-3 rounded-lg text-sm ${backupResult.success ? 'bg-green-500/10 border border-green-500/20 text-green-300' : 'bg-red-500/10 border border-red-500/20 text-red-300'}`}>
+              {backupResult.message}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Update Section */}
       <div className="bg-[#1A1D27] border border-[#2D3348] rounded-xl p-6">
         <h3 className="text-lg font-semibold text-white mb-4">程序更新</h3>
+        
+        {/* Version Info */}
+        {versionInfo && (
+          <div className="mb-4 p-4 rounded-lg bg-[#0F1117] border border-[#2D3348]">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-sm text-[#94A3B8]">当前版本：</span>
+                  <span className="text-sm font-mono text-white">v{versionInfo.local.version}</span>
+                  <span className="text-xs text-[#94A3B8] ml-2">({versionInfo.local.commitHash})</span>
+                </div>
+              </div>
+              {versionInfo.remote.hasUpdate && (
+                <div className="flex items-center justify-between pt-2 border-t border-[#2D3348]">
+                  <div>
+                    <span className="text-sm text-[#94A3B8]">最新版本：</span>
+                    <span className="text-sm font-mono text-blue-400">v{versionInfo.remote.version}</span>
+                    <span className="text-xs text-[#94A3B8] ml-2">({versionInfo.remote.commitHash})</span>
+                  </div>
+                  <Badge variant="destructive" className="text-xs">有更新</Badge>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+        
         <p className="text-sm text-[#94A3B8] mb-4">
           点击「检查更新」从 GitHub 仓库拉取最新代码。更新完成后需要重启程序。
         </p>
@@ -325,7 +561,23 @@ export function SettingsPanel() {
         </div>
         {updateResult && (
           <div className={`mt-3 p-3 rounded-lg text-sm ${updateResult.success ? 'bg-green-500/10 border border-green-500/20 text-green-300' : 'bg-red-500/10 border border-red-500/20 text-red-300'}`}>
-            {updateResult.message}
+            <div className="flex items-start gap-2">
+              {updateResult.success ? <CheckCircle className="w-4 h-4 mt-0.5 shrink-0" /> : <XCircle className="w-4 h-4 mt-0.5 shrink-0" />}
+              <div>
+                <p>{updateResult.message}</p>
+                {updateResult.oldVersion && updateResult.newVersion && (
+                  <p className="text-xs mt-1 opacity-80">
+                    从 v{updateResult.oldVersion} 升级到 v{updateResult.newVersion}
+                  </p>
+                )}
+              </div>
+            </div>
+            {updateResult.success && updateResult.changelog && (
+              <div className="mt-3 pt-3 border-t border-green-500/20">
+                <p className="text-xs font-medium mb-1">更新内容：</p>
+                <div className="text-xs space-y-1 whitespace-pre-wrap">{updateResult.changelog}</div>
+              </div>
+            )}
           </div>
         )}
       </div>

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { execSync } from 'child_process';
 import path from 'path';
+import fs from 'fs';
 
 export async function POST(request: NextRequest) {
   try {
@@ -17,6 +18,10 @@ export async function POST(request: NextRequest) {
     }
 
     // 获取当前版本信息
+    const packageJsonPath = path.join(projectRoot, 'package.json');
+    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
+    const oldVersion = packageJson.version;
+
     const currentHash = execSync('git rev-parse --short HEAD', { cwd: projectRoot }).toString().trim();
     const currentBranch = execSync('git branch --show-current', { cwd: projectRoot }).toString().trim();
 
@@ -41,17 +46,36 @@ export async function POST(request: NextRequest) {
 
     const newHash = execSync('git rev-parse --short HEAD', { cwd: projectRoot }).toString().trim();
 
+    // 读取新版本号
+    const newPackageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
+    const newVersion = newPackageJson.version;
+
+    // 读取更新日志
+    let changelog = '';
+    const changelogPath = path.join(projectRoot, 'CHANGELOG.md');
+    if (fs.existsSync(changelogPath)) {
+      const changelogContent = fs.readFileSync(changelogPath, 'utf-8');
+      const versionMatch = changelogContent.match(/## \[.*?\] - .*?\n([\s\S]*?)(?=## \[|$)/);
+      if (versionMatch) {
+        changelog = versionMatch[1].trim();
+      }
+    }
+
     return NextResponse.json({
       success: true,
       updated: true,
-      message: '更新成功！请重启程序以应用更新。',
-      oldVersion: currentHash,
-      newVersion: newHash,
+      message: `更新成功！从 v${oldVersion} 升级到 v${newVersion}`,
+      oldVersion,
+      newVersion,
+      oldCommit: currentHash,
+      newCommit: newHash,
+      changelog,
+      needRestart: true,
     });
   } catch (error: any) {
     const errorMsg = error.stderr?.toString() || error.message || '未知错误';
     return NextResponse.json(
-      { success: false, error: `更新失败: ${errorMsg}` },
+      { success: false, error: `更新失败：${errorMsg}` },
       { status: 500 }
     );
   }
@@ -60,6 +84,9 @@ export async function POST(request: NextRequest) {
 export async function GET() {
   try {
     const projectRoot = path.resolve(process.cwd());
+    const packageJsonPath = path.join(projectRoot, 'package.json');
+    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
+
     const currentHash = execSync('git rev-parse --short HEAD', { cwd: projectRoot }).toString().trim();
     const currentBranch = execSync('git branch --show-current', { cwd: projectRoot }).toString().trim();
 
@@ -72,7 +99,8 @@ export async function GET() {
     return NextResponse.json({
       success: true,
       data: {
-        currentVersion: currentHash,
+        currentVersion: packageJson.version,
+        commitHash: currentHash,
         branch: currentBranch,
         hasUpdate,
       },
@@ -82,6 +110,7 @@ export async function GET() {
       success: true,
       data: {
         currentVersion: 'unknown',
+        commitHash: 'unknown',
         branch: 'unknown',
         hasUpdate: false,
         isGitRepo: false,
